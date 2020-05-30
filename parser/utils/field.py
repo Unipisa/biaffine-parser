@@ -4,7 +4,7 @@ from collections import Counter
 from parser.utils.vocab import Vocab
 
 import torch
-
+import sys
 
 class Field(object):
 
@@ -99,7 +99,7 @@ class Field(object):
             sequences = [sequence + [self.eos_index] for sequence in sequences]
         sequences = [torch.tensor(sequence) for sequence in sequences]
 
-        return sequences
+        return sequences, []
 
 
 class CharField(Field):
@@ -148,24 +148,36 @@ class CharField(Field):
             for sequence in sequences
         ]
 
-        return sequences
+        return sequences, []
 
 
 class BertField(Field):
 
-    def numericalize(self, sequences):
-        subwords, lens = [], []
-        sequences = [([self.bos] if self.bos else []) + list(sequence) +
-                     ([self.eos] if self.eos else [])
-                     for sequence in sequences]
+    def __init__(self, *args, **kwargs):
+        self.max_len = kwargs.pop('max_len') if 'max_len' in kwargs else 512
+        super(BertField, self).__init__(*args, **kwargs)
 
-        for sequence in sequences:
+    def numericalize(self, sequences):
+        """
+        :return: list(token_ids), list(len(pieces) f.e. token), list(len(pieces)>0 f.e. token.
+        """
+        subwords, lens, drop = [], [], []
+
+        for i, sequence in enumerate(sequences):
+            sequence = ([self.bos] if self.bos else []) + \
+                       list(sequence) + \
+                       ([self.eos] if self.eos else [])
             sequence = [self.transform(token) for token in sequence]
             sequence = [piece if piece else self.transform(self.pad)
                         for piece in sequence]
-            subwords.append(sum(sequence, []))
+            pieces = sum(sequence, [])
+            if len(pieces) > self.max_len: # BERT pretrained limit
+                print(f"more than {self.max_len} wordpieces from sentence {i} of length {len(sequence)}",
+                      file=sys.stderr)
+                drop.append(i)
+            subwords.append(pieces)
             lens.append(torch.tensor([len(piece) for piece in sequence]))
         subwords = [torch.tensor(pieces) for pieces in subwords]
         mask = [torch.ones(len(pieces)).ge(0) for pieces in subwords]
 
-        return list(zip(subwords, lens, mask))
+        return list(zip(subwords, lens, mask)), drop

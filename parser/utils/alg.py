@@ -37,21 +37,14 @@ def kmeans(x, k):
     # assign all datapoints to the new-generated clusters
     # without considering the empty ones
     y, assigned = y[indices], y.unique().tolist()
-    # # get the centroids of the assigned clusters
-    # centroids = c[assigned].tolist()
-    # # map all values of datapoints to buckets
-    # clusters = [torch.where(y.eq(i))[0].tolist() for i in assigned]
+    # get the centroids of the assigned clusters
+    centroids = c[assigned].tolist()
+    # map all values of datapoints to buckets
+    clusters = [torch.where(y.eq(i))[0].tolist() for i in assigned]
 
-    # return centroids, clusters
+    return centroids, clusters
 
-    # Attardi (attardi@di.unipi.it)
     # Rebalance clusters, or else we run out of memory,
-    # with a cluster of size [640, 169] with embeddings of size [30522, 768]
-    # that calls:
-    #   File "/usr/local/lib/python3.6/dist-packages/torch/nn/functional.py",\
-    #      line 1373, in linear
-    #      output = input.matmul(weight.t())
-    # with input of size [640, 169, 768] and weight of size [30522, 768].
     centroids = c[assigned]
     # sort points according to distance from farthest centroid
     xt = x.unsqueeze(-1)
@@ -61,9 +54,8 @@ def kmeans(x, k):
     for p in ptidx:
         c = clusters[cit]
         c.append(int(p))
-        if len(c) == csize + (rest > 0):
+        if len(c) == csize + (cit < rest):
             cit += 1
-            rest -= 1
     centroids = [float(xt[c].mean()) for c in clusters]
 
     return centroids, clusters

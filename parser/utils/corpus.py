@@ -82,7 +82,7 @@ class Corpus(object):
                 line = line.strip()
                 if not line:
                     if len(values) > max_sent_length:
-                        print('Sentence longer than max_sent_length',
+                        print('Discarded sentence longer than max_sent_length:',
                               len(values), file=sys.stderr)
                         values = []
                         continue

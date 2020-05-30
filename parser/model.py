@@ -76,6 +76,7 @@ class Model(nn.Module):
         return self
 
     def forward(self, words, feats):
+        # words, feats are the first two in the batch from TextDataLoader.__iter__()
         batch_size, seq_len = words.shape
         # get the mask and lengths of given batch
         mask = words.ne(self.pad_index)

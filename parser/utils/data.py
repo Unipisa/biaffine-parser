@@ -26,6 +26,7 @@ class TextDataLoader(DataLoader):
                     data = [pad_sequence(f, True, field.pad_index).to(device)
                             for f in zip(*data)]
                 batch.append(data)
+            # [list(word), list(bert), list(head), list(rels)] according to self.fields
             yield batch
 
 
@@ -39,12 +40,21 @@ class TextDataset(Dataset):
             field if isinstance(field, Iterable) else [field]
             for field in fields if field is not None
         ]))
+        discard = set()
         for field in self.fields:
-            value = field.numericalize(getattr(corpus, field.name))
+            value, drop  = field.numericalize(getattr(corpus, field.name))
+            setattr(self, field.name, value)
+            discard = discard.union(drop)
+        discard = list(discard)
+        # drop too long sentences. Attardi
+        for field in self.fields:
+            value = getattr(self, field.name)
+            value = [x for i,x in enumerate(value) if i not in discard]
             setattr(self, field.name, value)
         # NOTE: the final bucket count is roughly equal to n_buckets
-        self.lengths = [len(i) + sum([bool(field.bos), bool(field.bos)])
-                        for i in corpus]
+        # the length should be those of the wordpieces, not of corpus. Attardi
+        self.lengths = [len(s) + sum([bool(field.bos), bool(field.bos)])
+                        for i,s in enumerate(corpus) if i not in discard]
         self.buckets = dict(zip(*kmeans(self.lengths, n_buckets)))
 
     def __getitem__(self, index):

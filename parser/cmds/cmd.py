@@ -23,7 +23,7 @@ class CMD(object):
             os.mkdir(args.file)
         if not os.path.exists(args.fields) or args.preprocess:
             print("Preprocess the data")
-            self.WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=True)
+            self.WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=args.lower)
             if args.feat == 'char':
                 self.FEAT = CharField('chars', pad=pad, unk=unk, bos=bos,
                                       fix_len=args.fix_len, tokenize=list)

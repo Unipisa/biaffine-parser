@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
-import math
 
 
 class Train(CMD):
@@ -32,10 +31,12 @@ class Train(CMD):
                                help='path to test file')
         subparser.add_argument('--fembed', default='data/glove.6B.100d.txt',
                                help='path to pretrained embeddings')
+        subparser.add_argument('--lower', action='store_true', # Attardi
+                               help='whether to turn words to lowercase')
         subparser.add_argument('--unk', default='unk',
                                help='unk token in pretrained embeddings')
-        subparser.add_argument('--max-sent-length', default=math.inf, type=int,
-                               help='max sentence length (longer are discarded)')
+        subparser.add_argument('--max-sent-length', default=512, type=int,
+                               help='max tokenized sentence length (longer ones are discarded)')
 
         return subparser
 
