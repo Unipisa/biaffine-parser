@@ -5,10 +5,15 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence
 
 
-class CHAR_LSTM(nn.Module):
+class CharLSTM(nn.Module):
 
-    def __init__(self, n_chars, n_embed, n_out):
-        super(CHAR_LSTM, self).__init__()
+    def __init__(self, n_chars, n_embed, n_out, pad_index=0):
+        super(CharLSTM, self).__init__()
+
+        self.n_chars = n_chars
+        self.n_embed = n_embed
+        self.n_out = n_out
+        self.pad_index = pad_index
 
         # the embedding layer
         self.embed = nn.Embedding(num_embeddings=n_chars,
@@ -19,12 +24,30 @@ class CHAR_LSTM(nn.Module):
                             batch_first=True,
                             bidirectional=True)
 
+    def __repr__(self):
+        s = self.__class__.__name__ + '('
+        s += f"{self.n_chars}, {self.n_embed}, "
+        s += f"n_out={self.n_out}, "
+        s += f"pad_index={self.pad_index}"
+        s += ')'
+
+        return s
+
     def forward(self, x):
-        mask = x.gt(0)
-        lens = mask.sum(dim=1)
+        # [batch_size, seq_len, fix_len]
+        mask = x.ne(self.pad_index)
+        # [batch_size, seq_len]
+        lens = mask.sum(-1)
+        char_mask = lens.gt(0)
 
-        x = pack_padded_sequence(self.embed(x), lens, True, False)
-        x, (hidden, _) = self.lstm(x)
-        hidden = torch.cat(torch.unbind(hidden), dim=-1)
+        # [n, fix_len, n_embed]
+        x = self.embed(x[char_mask])
+        x = pack_padded_sequence(x, lens[char_mask], True, False)
+        x, (h, _) = self.lstm(x)
+        # [n, fix_len, n_out]
+        h = torch.cat(torch.unbind(h), dim=-1)
+        # [batch_size, seq_len, n_out]
+        embed = h.new_zeros(*lens.shape, self.n_out)
+        embed = embed.masked_scatter_(char_mask.unsqueeze(-1), h)
 
-        return hidden
+        return embed

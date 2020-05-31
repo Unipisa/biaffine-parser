@@ -7,11 +7,16 @@ from parser.utils.field import Field
 import sys
 import math
 
-CoNLL = namedtuple(typename='CoNLL',
-                   field_names=['ID', 'FORM', 'LEMMA', 'CPOS', 'POS',
-                                'FEATS', 'HEAD', 'DEPREL', 'PHEAD', 'PDEPREL'],
-                   )                      # defaults=[None]*10)
-CoNLL.__new__.__defaults__ = (None,) * 10
+if 'dedfaults' in namedtuple.__code__.co_varnames[:namedtuple.__code__.co_argcount]:
+    CoNLL = namedtuple(typename='CoNLL',
+                       field_names=['ID', 'FORM', 'LEMMA', 'CPOS', 'POS',
+                                    'FEATS', 'HEAD', 'DEPREL', 'PHEAD', 'PDEPREL'],
+                       defaults=[None]*10)
+else:
+    CoNLL = namedtuple(typename='CoNLL',
+                       field_names=['ID', 'FORM', 'LEMMA', 'CPOS', 'POS',
+                                    'FEATS', 'HEAD', 'DEPREL', 'PHEAD', 'PDEPREL'])
+    CoNLL.__new__.__defaults__ = (None,) * 10
 
 
 class Sentence(object):

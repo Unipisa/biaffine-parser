@@ -19,8 +19,6 @@ class Train(CMD):
         subparser = parser.add_parser(
             name, help='Train a model.'
         )
-        subparser.add_argument('--buckets', default=32, type=int,
-                               help='max num of buckets to use')
         subparser.add_argument('--punct', action='store_true',
                                help='whether to include punctuation')
         subparser.add_argument('--ftrain', default='data/ptb/train.conllx',
@@ -82,11 +80,9 @@ class Train(CMD):
 
         for epoch in range(1, args.epochs + 1):
             start = datetime.now()
-            # train one epoch and update the parameters
-            self.train(train.loader)
 
             print(f"Epoch {epoch} / {args.epochs}:")
-            loss, train_metric = self.evaluate(train.loader)
+            loss, train_metric = self.train(train.loader)
             print(f"{'train:':6} Loss: {loss:.4f} {train_metric}")
             loss, dev_metric = self.evaluate(dev.loader)
             print(f"{'dev:':6} Loss: {loss:.4f} {dev_metric}")
@@ -95,7 +91,7 @@ class Train(CMD):
 
             t = datetime.now() - start
             # save the model if it is the best so far
-            if dev_metric > best_metric and epoch > args.patience:
+            if dev_metric > best_metric and epoch > args.patience//10:
                 best_e, best_metric = epoch, dev_metric
                 if hasattr(self.model, 'module'):
                     self.model.module.save(args.model)

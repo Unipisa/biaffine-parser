@@ -33,9 +33,15 @@ if __name__ == '__main__':
                                help='max num of threads')
         subparser.add_argument('--tree', action='store_true',
                                help='whether to ensure well-formedness')
-        subparser.add_argument('--feat', default='tag',
+        subparser.add_argument('--proj', action='store_true',
+                               help='whether to projectivise the data')
+        subparser.add_argument('--feat', default='char',
                                choices=['tag', 'char', 'bert', 'electra'],
                                help='choices of additional features')
+        subparser.add_argument('--batch-size', default=5000, type=int,
+                               help='batch size')
+        subparser.add_argument('--buckets', default=32, type=int,
+                               help='max num of buckets to use')
     args = parser.parse_args()
 
     print(f"Set the max num of threads to {args.threads}")
@@ -48,10 +54,7 @@ if __name__ == '__main__':
     args.fields = os.path.join(args.file, 'fields')
     args.model = os.path.join(args.file, 'model')
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    print(f"Override the default configs with parsed arguments")
     args = Config(args.conf).update(vars(args))
-    print(args)
 
     print(f"Run the subcommand in mode {args.mode}")
     cmd = subcommands[args.mode]

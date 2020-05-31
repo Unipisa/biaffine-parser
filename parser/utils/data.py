@@ -3,9 +3,10 @@
 from collections.abc import Iterable
 from itertools import chain
 from parser.utils.alg import kmeans
+from parser.utils.field import Field
+from parser.utils.fn import pad
 
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset, Sampler
 
 
@@ -20,11 +21,12 @@ class TextDataLoader(DataLoader):
         for raw_batch in super(TextDataLoader, self).__iter__():
             batch, device = [], 'cuda' if torch.cuda.is_available() else 'cpu'
             for data, field in zip(raw_batch, self.fields):
-                if isinstance(data[0], torch.Tensor):
-                    data = pad_sequence(data, True, field.pad_index).to(device)
-                elif isinstance(data[0], Iterable):
-                    data = [pad_sequence(f, True, field.pad_index).to(device)
-                            for f in zip(*data)]
+                if isinstance(field, Field):
+                    if isinstance(data[0], torch.Tensor):
+                        data = pad(data, field.pad_index).to(device)
+                    elif isinstance(data[0], Iterable):
+                        data = [pad(f, field.pad_index).to(device)
+                                for f in zip(*data)]
                 batch.append(data)
             # [list(word), list(bert), list(head), list(rels)] according to self.fields
             yield batch
@@ -40,21 +42,14 @@ class TextDataset(Dataset):
             field if isinstance(field, Iterable) else [field]
             for field in fields if field is not None
         ]))
-        discard = set()
         for field in self.fields:
-            value, drop  = field.numericalize(getattr(corpus, field.name))
-            setattr(self, field.name, value)
-            discard = discard.union(drop)
-        discard = list(discard)
-        # drop too long sentences. Attardi
-        for field in self.fields:
-            value = getattr(self, field.name)
-            value = [x for i,x in enumerate(value) if i not in discard]
-            setattr(self, field.name, value)
+            setattr(self,
+                    field.name,
+                    field.transform(getattr(corpus, field.name)))
         # NOTE: the final bucket count is roughly equal to n_buckets
-        # the length should be those of the wordpieces, not of corpus. Attardi
-        self.lengths = [len(s) + sum([bool(field.bos), bool(field.bos)])
-                        for i,s in enumerate(corpus) if i not in discard]
+        # FIXME: the lengths should be those of the wordpieces, not of corpus tokens
+        self.lengths = [len(i) + sum([bool(field.bos), bool(field.eos)])
+                        for i in corpus]
         self.buckets = dict(zip(*kmeans(self.lengths, n_buckets)))
 
     def __getitem__(self, index):
@@ -109,12 +104,13 @@ class TextSampler(Sampler):
         return sum(self.chunks)
 
 
-def batchify(dataset, batch_size, shuffle=False):
+def batchify(dataset, batch_size, shuffle=False, num_workers=0):
     batch_sampler = TextSampler(buckets=dataset.buckets,
                                 batch_size=batch_size,
                                 shuffle=shuffle)
     loader = TextDataLoader(dataset=dataset,
                             batch_sampler=batch_sampler,
-                            collate_fn=dataset.collate_fn)
+                            collate_fn=dataset.collate_fn,
+                            num_workers=num_workers)
 
     return loader
