@@ -35,6 +35,7 @@ class CMD(object):
                                          pad=tokenizer.pad_token,
                                          unk=tokenizer.unk_token,
                                          bos=tokenizer.cls_token,
+                                         fix_len=args.fix_len,
                                          tokenize=tokenizer.tokenize)
                 self.FEAT.vocab = tokenizer.vocab
             elif args.feat == 'electra':
@@ -58,7 +59,7 @@ class CMD(object):
                 self.fields = CoNLL(FORM=self.WORD, CPOS=self.FEAT,
                                     HEAD=self.ARC, DEPREL=self.REL)
 
-            train = Corpus.load(args.ftrain, self.fields)
+            train = Corpus.load(args.ftrain, self.fields, max_sent_length=args.max_sent_length)
             if args.fembed:
                 embed = Embedding.load(args.fembed, args.unk)
             else:
