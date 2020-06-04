@@ -38,15 +38,6 @@ class CMD(object):
                                          fix_len=args.fix_len,
                                          tokenize=tokenizer.tokenize)
                 self.FEAT.vocab = tokenizer.vocab
-            elif args.feat == 'electra':
-                from transformers import ElectraTokenizer
-                tokenizer = ElectraTokenizer.from_pretrained(args.electra_model)
-                self.FEAT = SubwordField('electra',
-                                         pad=tokenizer.pad_token,
-                                         unk=tokenizer.unk_token,
-                                         bos=tokenizer.cls_token,
-                                         tokenize=tokenizer.tokenize)
-                self.FEAT.vocab = tokenizer.vocab
             else:
                 self.FEAT = Field('tags', bos=bos)
             self.ARC = Field('arcs', bos=bos, use_vocab=False,

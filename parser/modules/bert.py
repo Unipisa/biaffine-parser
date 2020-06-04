@@ -3,6 +3,7 @@
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import BertModel
+from transformers import AutoModel, AutoConfig
 
 from .scalar_mix import ScalarMix
 
@@ -63,3 +64,25 @@ class BertEmbedding(nn.Module):
             embed = self.projection(embed)
 
         return embed
+
+
+class AutoEmbedding(BertEmbedding):
+
+    def __init__(self, model, n_layers, n_out, pad_index=0,
+                 requires_grad=False):
+        super(BertEmbedding, self).__init__()
+
+        config = AutoConfig.from_pretrained(model)
+        config.output_hidden_states = True
+        self.bert = AutoModel.from_pretrained(model, config=config)
+        self.bert.config.output_hidden_states = True
+        self.bert = self.bert.requires_grad_(requires_grad)
+        self.n_layers = n_layers
+        self.n_out = n_out
+        self.pad_index = pad_index
+        self.requires_grad = requires_grad
+        self.hidden_size = self.bert.config.hidden_size
+
+        self.scalar_mix = ScalarMix(n_layers)
+        if self.hidden_size != n_out:
+            self.projection = nn.Linear(self.hidden_size, n_out, False)

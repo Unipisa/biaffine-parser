@@ -21,6 +21,8 @@ if __name__ == '__main__':
         subparser = subcommand.add_subparser(name, subparsers)
         subparser.add_argument('--conf', '-c', default='config.ini',
                                help='path to config file')
+        subparser.add_argument('--bert-model', '-m', default='bert-base-cased',
+                               help='pretrained BERT model')
         subparser.add_argument('--file', '-f', default='exp/ptb',
                                help='path to saved files')
         subparser.add_argument('--preprocess', '-p', action='store_true',

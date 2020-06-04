@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM
+from parser.modules import MLP, BertEmbedding, AutoEmbedding, Biaffine, BiLSTM, CharLSTM
 from parser.modules.dropout import IndependentDropout, SharedDropout
 from parser.utils.alg import eisner
 from parser.utils.fn import istree
@@ -25,15 +25,16 @@ class Model(nn.Module):
                                        n_out=args.n_feat_embed,
                                        pad_index=args.feat_pad_index)
         elif args.feat == 'bert':
-            self.feat_embed = BertEmbedding(model=args.bert_model,
-                                            n_layers=args.n_bert_layers,
-                                            n_out=args.n_feat_embed,
-                                            pad_index=args.feat_pad_index)
-        elif args.feat == 'electra':
-            self.feat_embed = ElectraEmbedding(model=args.electra_model,
-                                            n_layers=args.n_bert_layers,
-                                            n_out=args.n_feat_embed,
-                                            pad_index=args.feat_pad_index)
+            if args.bert_model.startswith('bert'):
+                self.feat_embed = BertEmbedding(model=args.bert_model,
+                                                n_layers=args.n_bert_layers,
+                                                n_out=args.n_feat_embed,
+                                                pad_index=args.feat_pad_index)
+            else:
+                self.feat_embed = AutoEmbedding(model=args.bert_model,
+                                                n_layers=args.n_bert_layers,
+                                                n_out=args.n_feat_embed,
+                                                pad_index=args.feat_pad_index)
         else:
             self.feat_embed = nn.Embedding(num_embeddings=args.n_feats,
                                            embedding_dim=args.n_feat_embed)
