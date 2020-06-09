@@ -43,7 +43,7 @@ class CMD(object):
             self.ARC = Field('arcs', bos=bos, use_vocab=False,
                              fn=numericalize)
             self.REL = Field('rels', bos=bos)
-            if args.feat in ('char', 'bert', 'electra'):
+            if args.feat in ('char', 'bert'):
                 self.fields = CoNLL(FORM=(self.WORD, self.FEAT),
                                     HEAD=self.ARC, DEPREL=self.REL)
             else:

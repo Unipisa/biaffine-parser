@@ -16,48 +16,57 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         self.args = args
+        n_feat_embed = args.n_feat_embed
         # the embedding layer
         self.word_embed = nn.Embedding(num_embeddings=args.n_words,
                                        embedding_dim=args.n_embed)
         if args.feat == 'char':
             self.feat_embed = CharLSTM(n_chars=args.n_feats,
                                        n_embed=args.n_char_embed,
-                                       n_out=args.n_feat_embed,
+                                       n_out=n_feat_embed,
                                        pad_index=args.feat_pad_index)
         elif args.feat == 'bert':
             if args.bert_model.startswith('bert'):
                 self.feat_embed = BertEmbedding(model=args.bert_model,
                                                 n_layers=args.n_bert_layers,
-                                                n_out=args.n_feat_embed,
-                                                pad_index=args.feat_pad_index)
+                                                n_out=n_feat_embed,
+                                                pad_index=args.feat_pad_index,
+                                                dropout=args.mix_dropout)
             else:
                 self.feat_embed = AutoEmbedding(model=args.bert_model,
                                                 n_layers=args.n_bert_layers,
-                                                n_out=args.n_feat_embed,
-                                                pad_index=args.feat_pad_index)
+                                                n_out=n_feat_embed,
+                                                pad_index=args.feat_pad_index,
+                                                dropout=args.mix_dropout)
+            n_feat_embed = self.feat_embed.n_out # taken from the model
         else:
             self.feat_embed = nn.Embedding(num_embeddings=args.n_feats,
-                                           embedding_dim=args.n_feat_embed)
+                                           embedding_dim=n_feat_embed)
         self.embed_dropout = IndependentDropout(p=args.embed_dropout)
 
-        # the lstm layer
-        self.lstm = BiLSTM(input_size=args.n_embed+args.n_feat_embed,
-                           hidden_size=args.n_lstm_hidden,
-                           num_layers=args.n_lstm_layers,
-                           dropout=args.lstm_dropout)
-        self.lstm_dropout = SharedDropout(p=args.lstm_dropout)
+        if args.n_lstm_layers:
+            # the lstm layer
+            self.lstm = BiLSTM(input_size=args.n_embed+n_feat_embed,
+                               hidden_size=args.n_lstm_hidden,
+                               num_layers=args.n_lstm_layers,
+                               dropout=args.lstm_dropout)
+            self.lstm_dropout = SharedDropout(p=args.lstm_dropout)
+            mlp_input_size = args.n_lstm_hidden*2
+        else:
+            self.lstm = None
+            mlp_input_size = args.n_embed+n_feat_embed
 
         # the MLP layers
-        self.mlp_arc_d = MLP(n_in=args.n_lstm_hidden*2,
+        self.mlp_arc_d = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
-        self.mlp_arc_h = MLP(n_in=args.n_lstm_hidden*2,
+        self.mlp_arc_h = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
-        self.mlp_rel_d = MLP(n_in=args.n_lstm_hidden*2,
+        self.mlp_rel_d = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_rel,
                              dropout=args.mlp_dropout)
-        self.mlp_rel_h = MLP(n_in=args.n_lstm_hidden*2,
+        self.mlp_rel_h = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_rel,
                              dropout=args.mlp_dropout)
 
@@ -101,10 +110,13 @@ class Model(nn.Module):
         # concatenate the word and feat representations
         embed = torch.cat((word_embed, feat_embed), dim=-1)
 
-        x = pack_padded_sequence(embed, lens, True, False)
-        x, _ = self.lstm(x)
-        x, _ = pad_packed_sequence(x, True, total_length=seq_len)
-        x = self.lstm_dropout(x)
+        if self.lstm:
+            x = pack_padded_sequence(embed, lens, True, False)
+            x, _ = self.lstm(x)
+            x, _ = pad_packed_sequence(x, True, total_length=seq_len)
+            x = self.lstm_dropout(x)
+        else:
+            x = embed
 
         # apply MLPs to the BiLSTM output states
         arc_d = self.mlp_arc_d(x)
