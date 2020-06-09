@@ -37,7 +37,10 @@ class CMD(object):
                                          bos=tokenizer.cls_token,
                                          fix_len=args.fix_len,
                                          tokenize=tokenizer.tokenize)
-                self.FEAT.vocab = tokenizer.vocab
+                if hasattr(tokenizer, 'vocab'):
+                    self.FEAT.vocab = tokenizer.vocab
+                else:
+                    self.FEAT.vocab = {tokenizer._convert_id_to_token(i): i for i in range(len(tokenizer))}
             else:
                 self.FEAT = Field('tags', bos=bos)
             self.ARC = Field('arcs', bos=bos, use_vocab=False,
