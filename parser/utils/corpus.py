@@ -21,8 +21,20 @@ else:
 
 class Sentence(object):
 
-    def __init__(self, fields, values):
-        for field, value in zip(fields, values):
+    def __init__(self, fields, lines):
+        self.annotations = dict()
+        values = []
+        for i, line in enumerate(lines):
+            if line.startswith('#'):
+                self.annotations[-i-1] = line
+            else:
+                value = line.split('\t')
+                if value[0].isdigit():
+                    values.append(value)
+                    self.annotations[int(value[0])] = '' # placeholder
+                else:
+                    self.annotations[-i] = line
+        for field, value in zip(fields, list(zip(*values))):
             if isinstance(field, Iterable):
                 for j in range(len(field)):
                     setattr(self, field[j].name, value)
@@ -42,9 +54,10 @@ class Sentence(object):
         return len(next(iter(self.values)))
 
     def __repr__(self):
-        return '\n'.join('\t'.join(map(str, line))
-                         for line in zip(*self.values)) + '\n'
-
+        merged = {**self.annotations,
+                  **{i+1: '\t'.join(map(str, line))
+                     for i, line in enumerate(zip(*self.values))} }
+        return '\n'.join(merged.values()) + '\n'
 
 class Corpus(object):
 
@@ -82,23 +95,19 @@ class Corpus(object):
         fields = [field if field is not None else Field(str(i))
                   for i, field in enumerate(fields)]
         with open(path, 'r') as f:
-            values = []
+            lines = []
             for line in f:
                 line = line.strip()
                 if not line:
-                    if len(values) > max_sent_length:
+                    if len(lines) > max_sent_length:
                         print('Discarded sentence longer than max_sent_length:',
-                              len(values), file=sys.stderr)
-                        values = []
+                              len(lines), file=sys.stderr)
+                        lines = []
                         continue
-                    sentences.append(Sentence(fields, list(zip(*values))))
-                    values = []
-                elif line.startswith('#'):
-                    continue    # CoNLLU
+                    sentences.append(Sentence(fields, lines))
+                    lines = []
                 else:
-                    token = line.split('\t')
-                    if '-' not in token[0] and '.' not in token[0]:  # CoNLLU
-                        values.append(token)
+                    lines.append(line)
 
         return cls(fields, sentences)
 

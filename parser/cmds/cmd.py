@@ -41,6 +41,7 @@ class CMD(object):
                     self.FEAT.vocab = tokenizer.vocab
                 else:
                     self.FEAT.vocab = {tokenizer._convert_id_to_token(i): i for i in range(len(tokenizer))}
+                args.feat_pad_index = self.FEAT.pad_index # so that it is saved correctly. Attardi
             else:
                 self.FEAT = Field('tags', bos=bos)
             self.ARC = Field('arcs', bos=bos, use_vocab=False,
