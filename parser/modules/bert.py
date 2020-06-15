@@ -23,19 +23,15 @@ class BertEmbedding(nn.Module):
 
         self.bert = BertModel.from_pretrained(model, output_hidden_states=True)
         self.bert = self.bert.requires_grad_(requires_grad)
-        if n_layers == 0:
-            n_layers = self.bert.config.num_hidden_layers
-        self.n_layers = n_layers
+        self.n_layers = n_layers if n_layers else self.bert.config.num_hidden_layers
         self.hidden_size = self.bert.config.hidden_size
-        if n_out == 0:
-            n_out = self.hidden_size
-        self.n_out = n_out
+        self.n_out = n_out if n_out else self.hidden_size
         self.pad_index = pad_index
         self.requires_grad = requires_grad
 
-        self.scalar_mix = ScalarMix(n_layers, dropout)
-        if self.hidden_size != n_out:
-            self.projection = nn.Linear(self.hidden_size, n_out, False)
+        self.scalar_mix = ScalarMix(self.n_layers, dropout)
+        if self.hidden_size != self.n_out:
+            self.projection = nn.Linear(self.hidden_size, self.n_out, False)
 
     def __repr__(self):
         s = self.__class__.__name__ + '('
@@ -58,7 +54,7 @@ class BertEmbedding(nn.Module):
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
         bert_mask = pad_sequence(mask[mask].split(lens.tolist()), True)
         # return the hidden states of all layers
-        _, _, bert = self.bert(subwords, attention_mask=bert_mask)
+        bert = self.bert(subwords, attention_mask=bert_mask)[-1]
         # [n_layers, batch_size, n_subwords, hidden_size]
         bert = bert[-self.n_layers:]
         # [batch_size, n_subwords, hidden_size]
@@ -86,18 +82,14 @@ class AutoEmbedding(BertEmbedding):
         config = AutoConfig.from_pretrained(model)
         config.output_hidden_states = True
         self.bert = AutoModel.from_pretrained(model, config=config)
-        self.bert.config.output_hidden_states = True
+        self.bert.config.output_hidden_states = True # redundant?
         self.bert = self.bert.requires_grad_(requires_grad)
-        if n_layers == 0:
-            n_layers = self.bert.config.num_hidden_layers
-        self.n_layers = n_layers
+        self.n_layers = n_layers if n_layers else self.bert.config.num_hidden_layers
         self.hidden_size = self.bert.config.hidden_size
-        if n_out == 0:
-            n_out = self.hidden_size
-        self.n_out = n_out
+        self.n_out = n_out if n_out else self.hidden_size
         self.pad_index = pad_index
         self.requires_grad = requires_grad
 
-        self.scalar_mix = ScalarMix(n_layers, dropout)
-        if self.hidden_size != n_out:
-            self.projection = nn.Linear(self.hidden_size, n_out, False)
+        self.scalar_mix = ScalarMix(self.n_layers, dropout)
+        if self.hidden_size != self.n_out:
+            self.projection = nn.Linear(self.hidden_size, self.n_out, False)
