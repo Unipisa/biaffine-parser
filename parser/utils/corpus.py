@@ -2,7 +2,6 @@
 
 from collections import namedtuple
 from collections.abc import Iterable
-from parser.utils.field import Field
 
 import sys
 import math
@@ -58,6 +57,7 @@ class Sentence(object):
                   **{i+1: '\t'.join(map(str, line))
                      for i, line in enumerate(zip(*self.values))} }
         return '\n'.join(merged.values()) + '\n'
+
 
 class Corpus(object):
 
