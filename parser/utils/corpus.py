@@ -2,6 +2,7 @@
 
 from collections import namedtuple
 from collections.abc import Iterable
+from .field import Field
 
 import sys
 import math
