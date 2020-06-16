@@ -82,14 +82,14 @@ class Field(RawField):
     @property
     def bos_index(self):
         if hasattr(self, 'vocab'):
-            return self.vocab[self.bos]
-        return self.specials.index(self.bos)
+            return self.vocab[self.bos] if self.bos else 0
+        return self.specials.index(self.bos) if self.bos else 0
 
     @property
     def eos_index(self):
         if hasattr(self, 'vocab'):
-            return self.vocab[self.eos]
-        return self.specials.index(self.eos)
+            return self.vocab[self.eos] if self.eos else 0
+        return self.specials.index(self.eos) if self.eos else 0
 
     def preprocess(self, sequence):
         if self.fn is not None:
@@ -174,7 +174,7 @@ class SubwordField(Field):
                                for seq in sequences
                                for token in seq)
         if self.use_vocab:
-            sequences = [[[self.vocab.get(i, self.unk_index) for i in token] for token in seq] # Attardi
+            sequences = [[[self.vocab[i] for i in token] for token in seq] # Attardi
                          for seq in sequences]
         if self.bos:
             sequences = [[[self.bos_index]] + seq for seq in sequences]
@@ -186,3 +186,4 @@ class SubwordField(Field):
                      for seq in sequences]
 
         return sequences
+

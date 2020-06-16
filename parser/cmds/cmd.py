@@ -7,6 +7,7 @@ from parser.utils.corpus import CoNLL, Corpus
 from parser.utils.field import Field, SubwordField
 from parser.utils.fn import ispunct, numericalize
 from parser.utils.metric import AttachmentMetric
+from parser.utils.vocab import FieldVocab
 
 import torch
 import torch.nn as nn
@@ -34,19 +35,23 @@ class CMD(object):
                 self.FEAT = SubwordField('bert',
                                          pad=tokenizer.pad_token,
                                          unk=tokenizer.unk_token,
-                                         bos=tokenizer.cls_token,
+                                         bos=tokenizer.bos_token or tokenizer.cls_token,
                                          fix_len=args.fix_len,
                                          tokenize=tokenizer.tokenize)
+                self.bos = self.FEAT.bos and bos
+                self.WORD.bos = self.bos # ensure representations of the same length
                 if hasattr(tokenizer, 'vocab'):
                     self.FEAT.vocab = tokenizer.vocab
                 else:
-                    self.FEAT.vocab = {tokenizer._convert_id_to_token(i): i for i in range(len(tokenizer))}
+                    self.FEAT.vocab = FieldVocab(tokenizer.unk_token_id,
+                                                 {tokenizer._convert_id_to_token(i): i
+                                                  for i in range(len(tokenizer))})
                 args.feat_pad_index = self.FEAT.pad_index # so that it is saved correctly. Attardi
             else:
-                self.FEAT = Field('tags', bos=bos)
-            self.ARC = Field('arcs', bos=bos, use_vocab=False,
+                self.FEAT = Field('tags', bos=self.bos)
+            self.ARC = Field('arcs', bos=self.bos, use_vocab=False,
                              fn=numericalize)
-            self.REL = Field('rels', bos=bos)
+            self.REL = Field('rels', bos=self.bos)
             if args.feat in ('char', 'bert'):
                 self.fields = CoNLL(FORM=(self.WORD, self.FEAT),
                                     HEAD=self.ARC, DEPREL=self.REL)
