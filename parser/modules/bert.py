@@ -54,7 +54,7 @@ class BertEmbedding(nn.Module):
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
         bert_mask = pad_sequence(mask[mask].split(lens.tolist()), True)
         # return the hidden states of all layers
-        bert = self.bert(subwords, attention_mask=bert_mask)[-1]
+        bert = self.bert(subwords, attention_mask=bert_mask.float())[-1] # float for XLNET
         # [n_layers, batch_size, n_subwords, hidden_size]
         bert = bert[-self.n_layers:]
         # [batch_size, n_subwords, hidden_size]
