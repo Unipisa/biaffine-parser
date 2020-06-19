@@ -6,6 +6,21 @@ import torch
 
 
 def kmeans(x, k):
+    """
+     Parameters
+    ----------
+    x : list
+        Lengths of sentences
+    k : int
+        Number of clusters
+    Returns
+    -------
+    centroids : list
+        Average lengths in each cluster
+    clusters : list
+        List of clusters, which hold indices of data points
+    """
+ 
     x = torch.tensor(x, dtype=torch.float)
     # count the frequency of each datapoint
     d, indices, f = x.unique(return_inverse=True, return_counts=True)
@@ -62,6 +77,10 @@ def kmeans(x, k):
 
 
 def tarjan(sequence):
+    """
+    Computes Tarjan's algorithm for finding strongly connected components (cycles) of a graph
+    """
+
     sequence[0] = -1
     # record the search order, i.e., the timestep
     dfn = [-1] * len(sequence)
