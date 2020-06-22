@@ -63,7 +63,9 @@ class Train(CMD):
               f"{len(train.buckets)} buckets")
 
         print("Create the model")
-        self.model = Model(args, mask_token_id=self.FEAT.mask_token_id).load_pretrained(self.WORD.embed)
+        self.model = Model(args, mask_token_id=self.FEAT.mask_token_id)
+        if self.WORD:
+            self.model.load_pretrained(self.WORD.embed)
         print(f"{self.model}\n")
         self.model = self.model.to(args.device)
         if torch.cuda.device_count() > 1:

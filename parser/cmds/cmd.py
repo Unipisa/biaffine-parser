@@ -45,7 +45,15 @@ class CMD(object):
             self.ARC = Field('arcs', bos=self.bos, use_vocab=False,
                              fn=numericalize)
             self.REL = Field('rels', bos=self.bos)
-            if args.feat in ('char', 'bert'):
+            if args.feat == 'bert':
+                if args.n_embed:
+                    self.fields = CoNLL(FORM=(self.WORD, self.FEAT),
+                                        HEAD=self.ARC, DEPREL=self.REL)
+                else:
+                    self.fields = CoNLL(FORM=self.FEAT,
+                                        HEAD=self.ARC, DEPREL=self.REL)
+                    self.WORD = None
+            elif args.feat == 'char':
                 self.fields = CoNLL(FORM=(self.WORD, self.FEAT),
                                     HEAD=self.ARC, DEPREL=self.REL)
             else:
@@ -57,28 +65,35 @@ class CMD(object):
                 embed = Embedding.load(args.fembed, args.unk)
             else:
                 embed = None
-            self.WORD.build(train, args.min_freq, embed)
+            if self.WORD:
+                self.WORD.build(train, args.min_freq, embed)
             self.FEAT.build(train)
             self.REL.build(train)
             torch.save(self.fields, args.fields)
         else:
             self.fields = torch.load(args.fields)
-            if args.feat in ('char', 'bert', 'electra'):
-                self.WORD, self.FEAT = self.fields.FORM
+            if args.feat in ('char', 'bert'):
+                if isinstance(self.fields.FORM, tuple):
+                    self.WORD, self.FEAT = self.fields.FORM
+                else:
+                    self.WORD, self.FEAT = None, self.fields.FORM
             else:
                 self.WORD, self.FEAT = self.fields.FORM, self.fields.CPOS
             self.ARC, self.REL = self.fields.HEAD, self.fields.DEPREL
         self.puncts = torch.tensor([i for s, i in self.WORD.vocab.stoi.items()
-                                    if ispunct(s)]).to(args.device)
+                                    if ispunct(s)]).to(args.device) if self.WORD else []
 
+        if self.WORD:
+            args.update({
+                'n_words': self.WORD.vocab.n_init,
+                'pad_index': self.WORD.pad_index,
+                'unk_index': self.WORD.unk_index,
+                'bos_index': self.WORD.bos_index,
+        })
         args.update({
-            'n_words': self.WORD.vocab.n_init,
             'n_feats': len(self.FEAT.vocab),
             'n_rels': len(self.REL.vocab),
-            'pad_index': self.WORD.pad_index,
-            'unk_index': self.WORD.unk_index,
-            'bos_index': self.WORD.bos_index,
-            'feat_pad_index': self.FEAT.pad_index
+            'feat_pad_index': self.FEAT.pad_index,
         })
 
         print(f"Override the default configs\n{args}")
@@ -89,13 +104,19 @@ class CMD(object):
 
         total_loss, metric = 0, AttachmentMetric()
 
-        for words, feats, arcs, rels in loader:
+        for batch in loader:
+            if self.WORD:
+                words, feats, arcs, rels = batch
+                mask = words.ne(self.model.pad_index)
+            else:
+                feats, arcs, rels = batch
+                words = None
+                mask = feats[:,:,0].ne(self.model.pad_index)
             self.optimizer.zero_grad()
 
-            mask = words.ne(self.args.pad_index)
+            s_arc, s_rel = self.model(words, feats)
             # ignore the first token of each sentence
             mask[:, 0] = 0
-            s_arc, s_rel = self.model(words, feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             loss.backward()
             nn.utils.clip_grad_norm_(self.model.parameters(),
@@ -105,7 +126,7 @@ class CMD(object):
 
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
             # ignore all punctuation if not specified
-            if not self.args.punct:
+            if self.puncts and not self.args.punct:
                 mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
             total_loss += loss.item()
             metric(arc_preds, rel_preds, arcs, rels, mask)
@@ -146,15 +167,21 @@ class CMD(object):
 
         total_loss, metric = 0, AttachmentMetric()
 
-        for words, feats, arcs, rels in loader:
-            mask = words.ne(self.args.pad_index)
+        for batch in loader:
+            if self.WORD:
+                words, feats, arcs, rels = batch
+                mask = words.ne(self.model.pad_index)
+            else:
+                feats, arcs, rels = batch
+                words = None
+                mask = feats[:,:,0].ne(self.model.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
             # ignore all punctuation if not specified
-            if not self.args.punct:
+            if self.puncts and  not self.args.punct:
                 mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
             total_loss += loss.item()
             metric(arc_preds, rel_preds, arcs, rels, mask)
@@ -167,8 +194,14 @@ class CMD(object):
         self.model.eval()
 
         arcs, rels, probs = [], [], []
-        for words, feats in loader:
-            mask = words.ne(self.args.pad_index)
+        for batch in loader:
+            if self.WORD:
+                words, feats = batch
+                mask = words.ne(self.model.pad_index)
+            else:
+                feats = batch[0]
+                words = None
+                mask = feats[:,:,0].ne(self.model.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
             lens = mask.sum(1).tolist()

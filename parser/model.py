@@ -16,9 +16,11 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         self.args = args
-        # the embedding layer
-        self.word_embed = nn.Embedding(num_embeddings=args.n_words,
-                                       embedding_dim=args.n_embed)
+        if args.n_embed:
+            # the embedding layer
+            self.word_embed = nn.Embedding(num_embeddings=args.n_words,
+                                           embedding_dim=args.n_embed)
+            self.unk_index = args.unk_index
         if args.feat == 'char':
             self.feat_embed = CharLSTM(n_chars=args.n_feats,
                                        n_embed=args.n_char_embed,
@@ -39,6 +41,7 @@ class Model(nn.Module):
             self.args.n_feat_embed = self.feat_embed.n_out # taken from the model
             self.args.n_bert_layers = self.feat_embed.n_layers # taken from the model
             self.pad_index = self.feat_embed.pad_index     # taken from the model
+            self.args.pad_index = self.pad_index           # update
         else:
             self.feat_embed = nn.Embedding(num_embeddings=args.n_feats,
                                            embedding_dim=args.n_feat_embed)
@@ -80,7 +83,7 @@ class Model(nn.Module):
                                  bias_x=True,
                                  bias_y=True)
         self.criterion = nn.CrossEntropyLoss()
-        self.unk_index = args.unk_index
+
 
     def load_pretrained(self, embed=None):
         if embed is not None:
@@ -91,24 +94,29 @@ class Model(nn.Module):
 
     def forward(self, words, feats):
         # words, feats are the first two in the batch from TextDataLoader.__iter__()
+        if words is None:
+            words = feats[:,:,0] # drop subpiece dimension
         batch_size, seq_len = words.shape
-        # get the mask and lengths of given batch
         mask = words.ne(self.pad_index)
+        # get the mask and lengths of given batch
         lens = mask.sum(dim=1)
-        ext_words = words
-        # set the indices larger than num_embeddings to unk_index
-        if hasattr(self, 'pretrained'):
-            ext_mask = words.ge(self.word_embed.num_embeddings)
-            ext_words = words.masked_fill(ext_mask, self.unk_index)
-
-        # get outputs from embedding layers
-        word_embed = self.word_embed(ext_words)
-        if hasattr(self, 'pretrained'):
-            word_embed += self.pretrained(words)
         feat_embed = self.feat_embed(feats)
-        word_embed, feat_embed = self.embed_dropout(word_embed, feat_embed)
-        # concatenate the word and feat representations
-        embed = torch.cat((word_embed, feat_embed), dim=-1)
+        if self.args.n_embed:
+            ext_words = words
+            # set the indices larger than num_embeddings to unk_index
+            if hasattr(self, 'pretrained'):
+                ext_mask = words.ge(self.word_embed.num_embeddings)
+                ext_words = words.masked_fill(ext_mask, self.unk_index)
+
+            # get outputs from embedding layers
+            word_embed = self.word_embed(ext_words)
+            if hasattr(self, 'pretrained'):
+                word_embed += self.pretrained(words)
+                word_embed, feat_embed = self.embed_dropout(word_embed, feat_embed)
+                # concatenate the word and feat representations
+                embed = torch.cat((word_embed, feat_embed), dim=-1)
+        else:
+            embed = self.embed_dropout(feat_embed)[0]
 
         if self.lstm:
             x = pack_padded_sequence(embed, lens, True, False)

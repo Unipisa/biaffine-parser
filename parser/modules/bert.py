@@ -38,6 +38,7 @@ class BertEmbedding(nn.Module):
         self.pad_index = config.pad_token_id
         self.requires_grad = requires_grad
         self.use_hidden_states = use_hidden_states
+        self.mask_token_id = mask_token_id
 
         self.token_dropout = TokenDropout(token_dropout, mask_token_id) if token_dropout else None
         self.scalar_mix = ScalarMix(self.n_layers, mix_dropout)
@@ -48,6 +49,7 @@ class BertEmbedding(nn.Module):
         s = self.__class__.__name__ + '('
         s += f"n_layers={self.n_layers}, n_out={self.n_out}, "
         s += f"pad_index={self.pad_index}"
+        s += f"mask_token_id={self.mask_token_id}"
         if self.requires_grad:
             s += f", requires_grad={self.requires_grad}"
         s += ')'
