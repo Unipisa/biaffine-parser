@@ -26,18 +26,11 @@ class CMD(object):
                 self.FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos,
                                          fix_len=args.fix_len, tokenize=list)
             elif args.feat == 'bert':
-                if args.bert_model.startswith('bert'):
-                    from transformers import BertTokenizer
-                    tokenizer = BertTokenizer.from_pretrained(args.bert_model)
-                else:           # BERT models from other authors on https://huggingface.co/models
-                    from transformers import AutoTokenizer
-                    tokenizer = AutoTokenizer.from_pretrained(args.bert_model)
+                from transformers import AutoTokenizer
+                tokenizer = AutoTokenizer.from_pretrained(args.bert_model)
                 self.FEAT = SubwordField('bert',
-                                         pad=tokenizer.pad_token,
-                                         unk=tokenizer.unk_token,
-                                         bos=tokenizer.bos_token or tokenizer.cls_token,
-                                         fix_len=args.fix_len,
-                                         tokenize=tokenizer.tokenize)
+                                         tokenizer=tokenizer,
+                                         fix_len=args.fix_len)
                 self.bos = self.FEAT.bos and bos
                 self.WORD.bos = self.bos # ensure representations of the same length
                 if hasattr(tokenizer, 'vocab'):
@@ -117,6 +110,33 @@ class CMD(object):
             total_loss += loss.item()
             metric(arc_preds, rel_preds, arcs, rels, mask)
         total_loss /= len(loader)
+
+        # # gradient accumulation attempt:
+        # # @see https://gist.github.com/thomwolf/ac7a7da6b1888c2eeac8ac8b9b05d3d3
+        # for i, (words, feats, arcs, rels) in enumerate(loader):
+        #     self.optimizer.zero_grad()
+
+        #     mask = words.ne(self.args.pad_index)
+        #     # ignore the first token of each sentence
+        #     mask[:, 0] = 0
+        #     s_arc, s_rel = self.model(words, feats)
+        #     loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
+        #     loss.backward()
+        #     nn.utils.clip_grad_norm_(self.model.parameters(),
+        #                              self.args.clip)
+        #     if (i+1) % self.args.accumulation_steps == 0: # Wait for several backward steps
+        #         self.optimizer.step()                     # Now we can do an optimizer step
+        #         self.scheduler.step()
+
+        #         arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
+        #         # ignore all punctuation if not specified
+        #         if not self.args.punct:
+        #             mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
+        #         self.zero_grad()                                   # Reset gradients tensors
+        #         if (i+1) % self.args.evaluation_steps == 0:        # Evaluate the model when we...
+        #             metric(arc_preds, rel_preds, arcs, rels, mask) # ...have no gradients accumulated
+        #     total_loss += loss.item()
+        # total_loss /= len(loader)
 
         return total_loss, metric
 

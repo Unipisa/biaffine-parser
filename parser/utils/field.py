@@ -40,6 +40,7 @@ class Field(RawField):
         self.use_vocab = use_vocab
         self.tokenize = tokenize
         self.fn = fn
+        self.mask_token_id = 0
 
         self.specials = [token for token in [pad, unk, bos, eos]
                          if token is not None]
@@ -140,8 +141,14 @@ class Field(RawField):
 class SubwordField(Field):
 
     def __init__(self, *args, **kwargs):
+        tokenizer = kwargs.pop('tokenizer') if 'tokenizer' in kwargs else 0
         self.fix_len = kwargs.pop('fix_len') if 'fix_len' in kwargs else 0
         super(SubwordField, self).__init__(*args, **kwargs)
+        self.pad = tokenizer.pad_token
+        self.unk = tokenizer.unk_token
+        self.bos = tokenizer.bos_token or tokenizer.cls_token
+        self.mask_token_id = tokenizer.mask_token_id
+        self.tokenize = tokenize=tokenizer.tokenize
 
     def build(self, corpus, min_freq=1, embed=None):
         if hasattr(self, 'vocab'):

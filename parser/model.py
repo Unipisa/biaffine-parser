@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from parser.modules import MLP, BertEmbedding, AutoEmbedding, Biaffine, BiLSTM, CharLSTM
+from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM
 from parser.modules.dropout import IndependentDropout, SharedDropout
 from parser.utils.alg import eisner
 from parser.utils.fn import istree
@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 class Model(nn.Module):
 
-    def __init__(self, args):
+    def __init__(self, args, mask_token_id=0):
         super(Model, self).__init__()
 
         self.args = args
@@ -24,23 +24,25 @@ class Model(nn.Module):
                                        n_embed=args.n_char_embed,
                                        n_out=args.n_feat_embed,
                                        pad_index=args.feat_pad_index)
+            self.pad_index = args.pad_index
         elif args.feat == 'bert':
-            if args.bert_model.startswith('bert'):
-                self.feat_embed = BertEmbedding(model=args.bert_model,
-                                                n_layers=args.n_bert_layers,
-                                                n_out=args.n_feat_embed,
-                                                pad_index=args.feat_pad_index,
-                                                dropout=args.mix_dropout)
-            else:
-                self.feat_embed = AutoEmbedding(model=args.bert_model,
-                                                n_layers=args.n_bert_layers,
-                                                n_out=args.n_feat_embed,
-                                                pad_index=args.feat_pad_index,
-                                                dropout=args.mix_dropout)
+            if not hasattr(args, 'token_dropout'):
+                args.token_dropout = 0.0 # PATCH
+            self.feat_embed = BertEmbedding(model=args.bert_model,
+                                            n_layers=args.n_bert_layers,
+                                            n_out=args.n_feat_embed,
+                                            requires_grad=args.bert_fine_tune,
+                                            mask_token_id=mask_token_id,
+                                            token_dropout=args.token_dropout,
+                                            mix_dropout=args.mix_dropout,
+                                            use_hidden_states=args.use_hidden_states)
             self.args.n_feat_embed = self.feat_embed.n_out # taken from the model
+            self.args.n_bert_layers = self.feat_embed.n_layers # taken from the model
+            self.pad_index = self.feat_embed.pad_index     # taken from the model
         else:
             self.feat_embed = nn.Embedding(num_embeddings=args.n_feats,
                                            embedding_dim=args.n_feat_embed)
+            self.pad_index = args.pad_index
         self.embed_dropout = IndependentDropout(p=args.embed_dropout)
 
         if args.n_lstm_layers:
@@ -78,7 +80,6 @@ class Model(nn.Module):
                                  bias_x=True,
                                  bias_y=True)
         self.criterion = nn.CrossEntropyLoss()
-        self.pad_index = args.pad_index
         self.unk_index = args.unk_index
 
     def load_pretrained(self, embed=None):
