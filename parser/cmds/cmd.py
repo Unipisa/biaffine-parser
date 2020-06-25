@@ -104,60 +104,36 @@ class CMD(object):
 
         total_loss, metric = 0, AttachmentMetric()
 
-        for batch in loader:
+        # gradient accumulation attempt:
+        # @see https://gist.github.com/thomwolf/ac7a7da6b1888c2eeac8ac8b9b05d3d3
+        for step, batch in enumerate(loader):
             if self.WORD:
                 words, feats, arcs, rels = batch
                 mask = words.ne(self.model.pad_index)
             else:
-                feats, arcs, rels = batch
-                words = None
+                words, (feats, arcs, rels) = None, batch
                 mask = feats[:,:,0].ne(self.model.pad_index)
-            self.optimizer.zero_grad()
 
-            s_arc, s_rel = self.model(words, feats)
             # ignore the first token of each sentence
             mask[:, 0] = 0
+            s_arc, s_rel = self.model(words, feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             loss.backward()
             nn.utils.clip_grad_norm_(self.model.parameters(),
                                      self.args.clip)
-            self.optimizer.step()
-            self.scheduler.step()
+            if (step+1) % self.args.accumulation_steps == 0: # Wait for several backward steps
+                self.optimizer.step()                        # Now we can do an optimizer step
+                self.scheduler.step()
+                self.model.zero_grad()                       # Reset gradients tensors
 
-            arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
-            # ignore all punctuation if not specified
-            if self.puncts and not self.args.punct:
-                mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
+                arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
+                # ignore all punctuation if not specified
+                if not self.args.punct:
+                    mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
+                if self.args.evaluate_in_training:                 # Evaluate the model when we...
+                    metric(arc_preds, rel_preds, arcs, rels, mask) # ...have no gradients accumulated
             total_loss += loss.item()
-            metric(arc_preds, rel_preds, arcs, rels, mask)
         total_loss /= len(loader)
-
-        # # gradient accumulation attempt:
-        # # @see https://gist.github.com/thomwolf/ac7a7da6b1888c2eeac8ac8b9b05d3d3
-        # for i, (words, feats, arcs, rels) in enumerate(loader):
-        #     self.optimizer.zero_grad()
-
-        #     mask = words.ne(self.args.pad_index)
-        #     # ignore the first token of each sentence
-        #     mask[:, 0] = 0
-        #     s_arc, s_rel = self.model(words, feats)
-        #     loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
-        #     loss.backward()
-        #     nn.utils.clip_grad_norm_(self.model.parameters(),
-        #                              self.args.clip)
-        #     if (i+1) % self.args.accumulation_steps == 0: # Wait for several backward steps
-        #         self.optimizer.step()                     # Now we can do an optimizer step
-        #         self.scheduler.step()
-
-        #         arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
-        #         # ignore all punctuation if not specified
-        #         if not self.args.punct:
-        #             mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
-        #         self.zero_grad()                                   # Reset gradients tensors
-        #         if (i+1) % self.args.evaluation_steps == 0:        # Evaluate the model when we...
-        #             metric(arc_preds, rel_preds, arcs, rels, mask) # ...have no gradients accumulated
-        #     total_loss += loss.item()
-        # total_loss /= len(loader)
 
         return total_loss, metric
 
@@ -181,7 +157,7 @@ class CMD(object):
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
             # ignore all punctuation if not specified
-            if self.puncts and  not self.args.punct:
+            if self.puncts is not None:
                 mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
             total_loss += loss.item()
             metric(arc_preds, rel_preds, arcs, rels, mask)

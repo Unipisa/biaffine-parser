@@ -21,6 +21,8 @@ class Model(nn.Module):
             self.word_embed = nn.Embedding(num_embeddings=args.n_words,
                                            embedding_dim=args.n_embed)
             self.unk_index = args.unk_index
+        else:
+            self.word_embed = None
         if args.feat == 'char':
             self.feat_embed = CharLSTM(n_chars=args.n_feats,
                                        n_embed=args.n_char_embed,
@@ -37,7 +39,9 @@ class Model(nn.Module):
                                             mask_token_id=mask_token_id,
                                             token_dropout=args.token_dropout,
                                             mix_dropout=args.mix_dropout,
-                                            use_hidden_states=args.use_hidden_states)
+                                            use_hidden_states=args.use_hidden_states,
+                                            n_attentions=args.n_attentions,
+                                            attention_layer=args.attention_layer)
             self.args.n_feat_embed = self.feat_embed.n_out # taken from the model
             self.args.n_bert_layers = self.feat_embed.n_layers # taken from the model
             self.pad_index = self.feat_embed.pad_index     # taken from the model
@@ -58,13 +62,13 @@ class Model(nn.Module):
             mlp_input_size = args.n_lstm_hidden*2
         else:
             self.lstm = None
-            mlp_input_size = args.n_embed+args.n_feat_embed
+            mlp_input_size = args.n_embed + args.n_feat_embed
 
         # the MLP layers
-        self.mlp_arc_d = MLP(n_in=mlp_input_size,
+        self.mlp_arc_d = MLP(n_in=mlp_input_size + args.n_attentions,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
-        self.mlp_arc_h = MLP(n_in=mlp_input_size,
+        self.mlp_arc_h = MLP(n_in=mlp_input_size + args.n_attentions,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
         self.mlp_rel_d = MLP(n_in=mlp_input_size,
@@ -100,8 +104,8 @@ class Model(nn.Module):
         mask = words.ne(self.pad_index)
         # get the mask and lengths of given batch
         lens = mask.sum(dim=1)
-        feat_embed = self.feat_embed(feats)
-        if self.args.n_embed:
+        feat_embed, attn = self.feat_embed(feats)
+        if self.word_embed:
             ext_words = words
             # set the indices larger than num_embeddings to unk_index
             if hasattr(self, 'pretrained'):
@@ -112,9 +116,9 @@ class Model(nn.Module):
             word_embed = self.word_embed(ext_words)
             if hasattr(self, 'pretrained'):
                 word_embed += self.pretrained(words)
-                word_embed, feat_embed = self.embed_dropout(word_embed, feat_embed)
-                # concatenate the word and feat representations
-                embed = torch.cat((word_embed, feat_embed), dim=-1)
+            word_embed, feat_embed = self.embed_dropout(word_embed, feat_embed)
+            # concatenate the word and feat representations
+            embed = torch.cat((word_embed, feat_embed), dim=-1)
         else:
             embed = self.embed_dropout(feat_embed)[0]
 
@@ -127,8 +131,16 @@ class Model(nn.Module):
             x = embed
 
         # apply MLPs to the BiLSTM output states
-        arc_d = self.mlp_arc_d(x)
-        arc_h = self.mlp_arc_h(x)
+        if attn is None:
+            arc_d = self.mlp_arc_d(x)
+            arc_h = self.mlp_arc_h(x)
+        else:
+            middle = self.feat_embed.n_attentions//2
+            for attni in attn:
+                for i in range(len(attni)):
+                    attni[i] = attni[i].roll(middle - i)
+            arc_d = self.mlp_arc_d(torch.cat((x, attn), dim=2))
+            arc_h = self.mlp_arc_h(torch.cat((x, attn), dim=2)) # FIXME: transpose
         rel_d = self.mlp_rel_d(x)
         rel_h = self.mlp_rel_h(x)
 

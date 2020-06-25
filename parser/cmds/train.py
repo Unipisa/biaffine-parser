@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import math
 from datetime import datetime, timedelta
 from parser import Model
 from parser.cmds.cmd import CMD
@@ -11,7 +12,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
-
+from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 class Train(CMD):
 
@@ -70,12 +71,25 @@ class Train(CMD):
         self.model = self.model.to(args.device)
         if torch.cuda.device_count() > 1:
             self.model = nn.DataParallel(self.model)
-        self.optimizer = Adam(self.model.parameters(),
-                              args.lr,
-                              (args.mu, args.nu),
-                              args.epsilon)
-        self.scheduler = ExponentialLR(self.optimizer,
-                                       args.decay**(1/args.decay_steps))
+        if args.optimizer == 'adamw':
+            self.optimizer = AdamW(self.model.parameters(),
+                                   args.lr,
+                                   (args.mu, args.nu),
+                                   args.epsilon,
+                                   args.decay)
+            training_steps = len(train.loader) // self.args.accumulation_steps \
+                             * self.args.epochs
+            warmup_steps = math.ceil(training_steps * self.args.warmup_steps_ratio)
+            self.scheduler = get_linear_schedule_with_warmup(
+                self.optimizer, num_warmup_steps=warmup_steps,
+                num_training_steps=training_steps)
+        else:
+            self.optimizer = Adam(self.model.parameters(),
+                                  args.lr,
+                                  (args.mu, args.nu),
+                                  args.epsilon)
+            self.scheduler = ExponentialLR(self.optimizer,
+                                           args.decay**(1/args.decay_steps))
 
         total_time = timedelta()
         best_e, best_metric = 1, Metric()
