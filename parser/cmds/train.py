@@ -43,9 +43,9 @@ class Train(CMD):
                                help='path to train file')
         subparser.add_argument('--fdev', default='data/ptb/dev.conllx',
                                help='path to dev file')
-        subparser.add_argument('--ftest', default='data/ptb/test.conllx',
+        subparser.add_argument('--ftest', default='',
                                help='path to test file')
-        subparser.add_argument('--fembed', default='data/glove.6B.100d.txt',
+        subparser.add_argument('--fembed', default='',
                                help='path to pretrained embeddings')
         subparser.add_argument('--lower', action='store_true', # Attardi
                                help='whether to turn words to lowercase')
@@ -61,24 +61,28 @@ class Train(CMD):
 
         train = Corpus.load(args.ftrain, self.fields, args.max_sent_length)
         dev = Corpus.load(args.fdev, self.fields, args.max_sent_length)
-        test = Corpus.load(args.ftest, self.fields, args.max_sent_length)
+        if args.ftest:
+            test = Corpus.load(args.ftest, self.fields, args.max_sent_length)
 
         train = TextDataset(train, self.fields, args.buckets)
         dev = TextDataset(dev, self.fields, args.buckets)
-        test = TextDataset(test, self.fields, args.buckets)
+        if args.ftest:
+            test = TextDataset(test, self.fields, args.buckets)
         # set the data loaders
         train.loader = batchify(train, args.batch_size, True)
         dev.loader = batchify(dev, args.batch_size)
-        test.loader = batchify(test, args.batch_size)
+        if args.ftest:
+            test.loader = batchify(test, args.batch_size)
         print(f"{'train:':6} {len(train):5} sentences, "
               f"{len(train.loader):3} batches, "
               f"{len(train.buckets)} buckets")
         print(f"{'dev:':6} {len(dev):5} sentences, "
               f"{len(dev.loader):3} batches, "
               f"{len(train.buckets)} buckets")
-        print(f"{'test:':6} {len(test):5} sentences, "
-              f"{len(test.loader):3} batches, "
-              f"{len(train.buckets)} buckets")
+        if args.ftest:
+            print(f"{'test:':6} {len(test):5} sentences, "
+                  f"{len(test.loader):3} batches, "
+                  f"{len(train.buckets)} buckets")
 
         print("Create the model")
         self.model = Model(args, mask_token_id=self.FEAT.mask_token_id)
@@ -121,8 +125,9 @@ class Train(CMD):
             print(f"{'train:':6} Loss: {loss:.4f} {train_metric}")
             loss, dev_metric = self.evaluate(dev.loader)
             print(f"{'dev:':6} Loss: {loss:.4f} {dev_metric}")
-            loss, test_metric = self.evaluate(test.loader)
-            print(f"{'test:':6} Loss: {loss:.4f} {test_metric}")
+            if args.ftest:
+                loss, test_metric = self.evaluate(test.loader)
+                print(f"{'test:':6} Loss: {loss:.4f} {test_metric}")
 
             t = datetime.now() - start
             # save the model if it is the best so far
@@ -139,9 +144,11 @@ class Train(CMD):
             if epoch - best_e >= args.patience:
                 break
         self.model = Model.load(args.model)
-        loss, metric = self.evaluate(test.loader)
+        if args.ftest:
+            loss, metric = self.evaluate(test.loader)
 
         print(f"max score of dev is {best_metric.score:.2%} at epoch {best_e}")
-        print(f"the score of test at epoch {best_e} is {metric.score:.2%}")
+        if args.ftest:
+            print(f"the score of test at epoch {best_e} is {metric.score:.2%}")
         print(f"average time of each epoch is {total_time / epoch}s")
         print(f"{total_time}s elapsed")
