@@ -40,7 +40,7 @@ class Model(nn.Module):
                                             token_dropout=args.token_dropout,
                                             mix_dropout=args.mix_dropout,
                                             use_hidden_states=args.use_hidden_states,
-                                            n_attentions=args.n_attentions,
+                                            n_attentions=args.n_mlp_arc if args.n_attentions else 0,
                                             attention_layer=args.attention_layer)
             self.args.n_feat_embed = self.feat_embed.n_out # taken from the model
             self.args.n_bert_layers = self.feat_embed.n_layers # taken from the model
@@ -65,10 +65,10 @@ class Model(nn.Module):
             mlp_input_size = args.n_embed + args.n_feat_embed
 
         # the MLP layers
-        self.mlp_arc_d = MLP(n_in=mlp_input_size + args.n_attentions,
+        self.mlp_arc_d = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
-        self.mlp_arc_h = MLP(n_in=mlp_input_size + args.n_attentions,
+        self.mlp_arc_h = MLP(n_in=mlp_input_size,
                              n_out=args.n_mlp_arc,
                              dropout=args.mlp_dropout)
         self.mlp_rel_d = MLP(n_in=mlp_input_size,
@@ -86,6 +86,11 @@ class Model(nn.Module):
                                  n_out=args.n_rels,
                                  bias_x=True,
                                  bias_y=True)
+
+        # transformer attention
+        if args.n_attentions:
+            self.arc_mix = nn.Parameter(torch.randn(1))
+
         self.criterion = nn.CrossEntropyLoss()
 
 
@@ -131,16 +136,8 @@ class Model(nn.Module):
             x = embed
 
         # apply MLPs to the BiLSTM output states
-        if attn is None:
-            arc_d = self.mlp_arc_d(x)
-            arc_h = self.mlp_arc_h(x)
-        else:
-            middle = self.feat_embed.n_attentions//2
-            for attni in attn:
-                for i in range(len(attni)):
-                    attni[i] = attni[i].roll(middle - i)
-            arc_d = self.mlp_arc_d(torch.cat((x, attn), dim=2))
-            arc_h = self.mlp_arc_h(torch.cat((x, attn), dim=2)) # FIXME: transpose
+        arc_d = self.mlp_arc_d(x)
+        arc_h = self.mlp_arc_h(x)
         rel_d = self.mlp_rel_d(x)
         rel_h = self.mlp_rel_h(x)
 
@@ -148,6 +145,10 @@ class Model(nn.Module):
         s_arc = self.arc_attn(arc_d, arc_h)
         # [batch_size, seq_len, seq_len, n_rels]
         s_rel = self.rel_attn(rel_d, rel_h).permute(0, 2, 3, 1)
+
+        # mix bert attentions
+        if attn is not None:
+            s_arc += self.arc_mix * attn
         # set the scores that exceed the length of each sentence to -inf
         s_arc.masked_fill_(~mask.unsqueeze(1), float('-inf'))
 

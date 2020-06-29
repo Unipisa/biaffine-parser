@@ -14,6 +14,23 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
+
+class TransparentDataParallel(nn.DataParallel):
+    """custom class so that I can have other attributes than modules."""
+
+    def __init__(self, module, **kwargs):
+        super(TransparentDataParallel, self).__init__(module, **kwargs)
+
+    def __getattr__(self, name):
+        if name is not 'module':
+            try:
+                return getattr(self.module, name)
+            except AttributeError:
+                pass
+
+        return super(nn.DataParallel, self).__getattr__(name)
+
+
 class Train(CMD):
 
     def add_subparser(self, name, parser):
@@ -70,19 +87,21 @@ class Train(CMD):
         print(f"{self.model}\n")
         self.model = self.model.to(args.device)
         if torch.cuda.device_count() > 1:
-            self.model = nn.DataParallel(self.model)
+            self.model = TransparentDataParallel(self.model)
         if args.optimizer == 'adamw':
             self.optimizer = AdamW(self.model.parameters(),
                                    args.lr,
                                    (args.mu, args.nu),
                                    args.epsilon,
                                    args.decay)
-            training_steps = len(train.loader) // self.args.accumulation_steps \
-                             * self.args.epochs
-            warmup_steps = math.ceil(training_steps * self.args.warmup_steps_ratio)
-            self.scheduler = get_linear_schedule_with_warmup(
-                self.optimizer, num_warmup_steps=warmup_steps,
-                num_training_steps=training_steps)
+            # training_steps = len(train.loader) // self.args.accumulation_steps \
+            #                  * self.args.epochs
+            # warmup_steps = math.ceil(training_steps * self.args.warmup_steps_ratio)
+            # self.scheduler = get_linear_schedule_with_warmup(
+            #     self.optimizer, num_warmup_steps=warmup_steps,
+            #     num_training_steps=training_steps)
+            self.scheduler = ExponentialLR(self.optimizer,
+                                           args.decay**(1/args.decay_steps))
         else:
             self.optimizer = Adam(self.model.parameters(),
                                   args.lr,

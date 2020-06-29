@@ -36,10 +36,10 @@ class BertEmbedding(nn.Module):
         config = AutoConfig.from_pretrained(model, output_hidden_states=True,
                                             output_attentions=n_attentions!=0)
         self.bert = AutoModel.from_pretrained(model, config=config)
-        self.bert = self.bert.requires_grad_(requires_grad)
-        self.n_layers = n_layers if n_layers else self.bert.config.num_hidden_layers
+        self.bert.requires_grad_( requires_grad)
+        self.n_layers = n_layers or self.bert.config.num_hidden_layers
         self.hidden_size = self.bert.config.hidden_size
-        self.n_out = n_out if n_out else self.hidden_size
+        self.n_out = n_out or self.hidden_size
         self.pad_index = config.pad_token_id
         self.requires_grad = requires_grad
         self.use_hidden_states = use_hidden_states
@@ -56,7 +56,11 @@ class BertEmbedding(nn.Module):
     def __repr__(self):
         s = self.__class__.__name__ + '('
         s += f"n_layers={self.n_layers}, n_out={self.n_out}, "
-        s += f"n_attentions={self.n_attentions}, "
+        s += f"scalar_mix={self.scalar_mix}, "
+        if self.n_attentions:
+            s += f"n_attentions={self.n_attentions}, "
+        if self.hidden_size != self.n_out:
+            s += f"projection={self.projection}, "
         s += f"pad_index={self.pad_index}, "
         s += f"mask_token_id={self.mask_token_id}"
         if self.requires_grad:
@@ -107,14 +111,15 @@ class BertEmbedding(nn.Module):
             sub_masks = pad_sequence(mask2[mask].split(lens.tolist()), True)
             seq_mask = torch.einsum('bi,bj->bij', sub_masks, sub_masks) # outer product
             seq_lens = seq_mask.sum((1,2))
+            # [batch_size, seq_len, seq_len]
             sub_attn = attn[seq_mask].split(seq_lens.tolist())
-            # fill a tensor [batch_size, seq_len, n_attentions]
-            seq_attn = attn.new_zeros(batch_size, seq_len, self.n_attentions)
+            # fill a tensor [batch_size, seq_len, seq_len]
+            seq_attn = attn.new_zeros(batch_size, seq_len, seq_len)
             for i, attn_i in enumerate(sub_attn):
                 size = sub_masks[i].sum(0)
                 attn_i = attn_i.view(size, size)
                 size = min(size, self.n_attentions)
-                seq_attn[i,:size,:size] = attn_i[:size, :size]
+                seq_attn[i,:size,:size] = attn_i
         if hasattr(self, 'projection'):
             embed = self.projection(embed)
 
