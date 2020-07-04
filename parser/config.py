@@ -17,10 +17,10 @@ class Config(ConfigParser):
                          for name, value in self.items(section)))
 
     def __repr__(self):
-        s = line = "-" * 15 + "-+-" + "-" * 25 + "\n"
-        s += f"{'Param':15} | {'Value':^25}\n" + line
+        s = line = "-" * 20 + "-+-" + "-" * 25 + "\n"
+        s += f"{'Param':20} | {'Value':^25}\n" + line
         for name, value in vars(self.namespace).items():
-            s += f"{name:15} | {str(value):^25}\n"
+            s += f"{name:20} | {str(value):^25}\n"
         s += line
 
         return s

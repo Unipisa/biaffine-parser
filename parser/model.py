@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
+from typing import Dict, Optional, Tuple, Any, List
 
 class Model(nn.Module):
 
@@ -89,10 +90,16 @@ class Model(nn.Module):
 
         # transformer attention
         if args.n_attentions:
-            self.arc_mix = nn.Parameter(torch.randn(1))
+            self.attn_mix = nn.Parameter(torch.randn(1))
 
         self.criterion = nn.CrossEntropyLoss()
 
+
+    def extra_repr(self):
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        return f"Total parameters: {total_params}\n" \
+            f"Trainable parameters: {trainable_params}"
 
     def load_pretrained(self, embed=None):
         if embed is not None:
@@ -101,7 +108,8 @@ class Model(nn.Module):
 
         return self
 
-    def forward(self, words, feats):
+    def forward(self, words: torch.Tensor,
+                feats: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # words, feats are the first two in the batch from TextDataLoader.__iter__()
         if words is None:
             words = feats[:,:,0] # drop subpiece dimension
@@ -148,31 +156,68 @@ class Model(nn.Module):
 
         # mix bert attentions
         if attn is not None:
-            s_arc += self.arc_mix * attn
+            s_arc += self.attn_mix * attn
         # set the scores that exceed the length of each sentence to -inf
         s_arc.masked_fill_(~mask.unsqueeze(1), float('-inf'))
+        # Lower the diagonal, because the head of a word can't be itself.
+        s_arc += torch.diag(s_arc.new(seq_len).fill_(float('-inf')))
 
         return s_arc, s_rel
 
-    def loss(self, s_arc, s_rel, arcs, rels, mask):
+    def loss(self, s_arc: torch.Tensor, s_rel: torch.Tensor,
+             arcs: torch.Tensor, rels: torch.Tensor,
+             mask: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the arc and tag loss for a sequence given gold heads and tags.
+        Parameters
+        ----------
+        s_arc : ``torch.Tensor``, required.
+            A tensor of shape (batch_size, sequence_length, tags_count),
+            which will be used to generate predictions for the dependency tags
+            for the given arcs.
+        s_rel : ``torch.Tensor``, required
+            A tensor of shape (batch_size, sequence_length, tags_count),
+            which will be used to generate predictions for the dependency tags
+            for the given arcs.
+        arcs : ``torch.Tensor``, required.
+            A tensor of shape (batch_size, sequence_length).
+            The indices of the heads for each word.
+        rels : ``torch.Tensor``, required.
+            A tensor of shape (batch_size, sequence_length).
+            The dependency labels of the heads for each word.
+        mask : ``torch.Tensor``, required.
+            A mask of shape (batch_size, sequence_length), denoting unpadded
+            elements in the sequence.
+        Returns
+        -------
+        loss : ``torch.Tensor``.
+            The sum of the cross-entropy losses from the arcs and rels predictions.
+        """
         s_arc, arcs = s_arc[mask], arcs[mask]
         s_rel, rels = s_rel[mask], rels[mask]
+        # select the predicted relations towards the correct heads
         s_rel = s_rel[torch.arange(len(arcs)), arcs]
         arc_loss = self.criterion(s_arc, arcs)
         rel_loss = self.criterion(s_rel, rels)
 
         return arc_loss + rel_loss
 
-    def decode(self, s_arc, s_rel, mask):
+    def decode(self, s_arc: torch.Tensor, s_rel: torch.Tensor,
+               mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         lens = mask.sum(1)
         # prevent self-loops
         s_arc.diagonal(0, 1, 2).fill_(float('-inf'))
+        # select the most likely arcs
         arc_preds = s_arc.argmax(-1)
-        bad = [not istree(seq[:i+1], self.args.proj)
-               for i, seq in zip(lens.tolist(), arc_preds.tolist())]
-        if self.args.tree and any(bad):
-            arc_preds[bad] = eisner(s_arc[bad], mask[bad])
+        if self.args.tree:
+            # ensure the arcs form a tree
+            bad = [not istree(seq[:i+1], self.args.proj)
+                   for i, seq in zip(lens.tolist(), arc_preds.tolist())]
+            if any(bad):
+                arc_preds[bad] = eisner(s_arc[bad], mask[bad])
+        # select the most likely rels
         rel_preds = s_rel.argmax(-1)
+        # choose those corresponding to the predicted arcs
         rel_preds = rel_preds.gather(-1, arc_preds.unsqueeze(-1)).squeeze(-1)
 
         return arc_preds, rel_preds

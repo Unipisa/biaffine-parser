@@ -47,9 +47,9 @@ class Train(CMD):
                                help='path to test file')
         subparser.add_argument('--fembed', default='',
                                help='path to pretrained embeddings')
-        subparser.add_argument('--lower', action='store_true', # Attardi
+        subparser.add_argument('--lower', action='store_true',
                                help='whether to turn words to lowercase')
-        subparser.add_argument('--unk', default='unk',
+        subparser.add_argument('--unk', default='[UNK]',
                                help='unk token in pretrained embeddings')
         subparser.add_argument('--max-sent-length', default=512, type=int,
                                help='max tokenized sentence length (longer ones are discarded)')

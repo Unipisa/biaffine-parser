@@ -97,7 +97,10 @@ class CMD(object):
         })
 
         print(f"Override the default configs\n{args}")
-        print(f"{self.WORD}\n{self.FEAT}\n{self.ARC}\n{self.REL}")
+        print("Features:")
+        if self.WORD:
+            print(f"   {self.WORD}")
+        print(f"   {self.FEAT}\n   {self.ARC}\n   {self.REL}")
 
     def train(self, loader):
         self.model.train()
@@ -115,7 +118,7 @@ class CMD(object):
                 words, (feats, arcs, rels) = None, batch
                 mask = feats[:,:,0].ne(self.model.pad_index)
 
-            # ignore the first token of each sentence
+            # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
@@ -155,7 +158,7 @@ class CMD(object):
                 feats, arcs, rels = batch
                 words = None
                 mask = feats[:,:,0].ne(self.model.pad_index)
-            # ignore the first token of each sentence
+            # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
@@ -182,7 +185,7 @@ class CMD(object):
                 feats = batch[0]
                 words = None
                 mask = feats[:,:,0].ne(self.model.pad_index)
-            # ignore the first token of each sentence
+            # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             lens = mask.sum(1).tolist()
             s_arc, s_rel = self.model(words, feats)

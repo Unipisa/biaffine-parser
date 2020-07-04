@@ -37,8 +37,8 @@ if __name__ == '__main__':
                                help='whether to ensure well-formedness')
         subparser.add_argument('--proj', action='store_true',
                                help='whether to projectivise the data')
-        subparser.add_argument('--feat', default='char',
-                               choices=['tag', 'char', 'bert', 'electra'],
+        subparser.add_argument('--feat', default='bert',
+                               choices=['tag', 'char', 'bert'],
                                help='choices of additional features')
         subparser.add_argument('--batch-size', default=5000, type=int,
                                help='batch size')

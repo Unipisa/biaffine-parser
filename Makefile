@@ -19,7 +19,10 @@ CORPUS_TRAIN = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-train.conllu
 CORPUS_DEV = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-dev.conllu
 CORPUS_TEST = $(CORPUS_DIR)/test-turkunlp/$(LANG)2.conllu
 
-BLIND_TEST=$(CORPUS_DIR)/test-udpipe/$(LANG).conllu
+#BLIND_TEST=$(CORPUS_DIR)/test-udpipe/$(LANG).conllu
+#BLIND_TEST=$(CORPUS_DIR)/../test-stanza-sent/$(LANG).conllu
+#BLIND_TEST=../EDparser/data/iwpt2020/test-udpipe/$(LANG).conllu
+BLIND_TEST=../iwpt2020stdata/sysoutputs/turkunlp/primary/$(LANG).conllu
 
 UD_TOOLS = $(CORPUS_DIR)/iwpt2020stdata/tools
 
@@ -46,15 +49,15 @@ else ifeq ($(LANG), en)
 else ifeq ($(LANG), et) #dev EDT
   CORPUS=et
   RES2=Estonian
-  MODEL = -m=TurkuNLP/wikibert-base-et-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-et-cased
 else ifeq ($(LANG), fi)
   CORPUS=fi_tdt
   RES2=Finnish-TDT
-  MODEL = -m=TurkuNLP/wikibert-base-fi-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-fi-cased
 else ifeq ($(LANG), fr)
   CORPUS=fr_sequoia
   RES2=French-Sequoia
-  MODEL = -m=TurkuNLP/wikibert-base-fr-cased
+  MODEL = -m=camembert-base #TurkuNLP/wikibert-base-fr-cased
 else ifeq ($(LANG), it)
   CORPUS=it_isdt
   RES2=Italian-ISDT
@@ -66,7 +69,7 @@ else ifeq ($(LANG), lt)
 else ifeq ($(LANG), lv)
   CORPUS=lv_lvtb
   RES2=Latvian-LVTB
-  MODEL = -m=TurkuNLP/wikibert-base-lv-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-lv-cased
 else ifeq ($(LANG), nl) #dev Alpino
   CORPUS=nl
   RES2=Dutch
@@ -82,7 +85,7 @@ else ifeq ($(LANG), ru)
 else ifeq ($(LANG), sk)
   CORPUS=sk_snk
   RES2=Slovak-SNK
-  MODEL = -m=TurkuNLP/wikibert-base-sk-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-sk-cased
 else ifeq ($(LANG), sv)
   CORPUS=sv_talbanken
   RES2=Swedish-Talbanken
@@ -105,33 +108,27 @@ endif
 # Targets
 
 EXP = exp
-EXP_OUT = exp
 
 .PRECIOUS: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)/model:
 	python -u run.py train -p -d=$(GPU) -f=$(dir $@) \
-	   --conf=$(CONFIG) \
-	   --feat=$(FEAT) $(MODEL) \
+	   --conf=$(CONFIG) $(MODEL) \
 	   --ftrain=$(CORPUS_TRAIN) $(MAX_SENT_LENGTH) $(BATCH_SIZE) $(BUCKETS) \
-	   --fdev=$(CORPUS_DEV) \
-	   --ftest=$(CORPUS_TEST) \
-	   --seed=1 \
-	   --unk='[unk]' \
-	   --fembed=$(EMBED)
+	   --fdev=$(CORPUS_DEV) #--unk='[UNK]' --ftest=$(CORPUS_TEST) --seed=1
 
-$(EXP_OUT)/$(LANG)-$(FEAT)$(VER)-test.conllu: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
-	python run.py predict -d=$(GPU) -f=$(dir $<) --feat=$(FEAT) --tree \
+$(EXP)/$(LANG)-$(FEAT)$(VER)-test.conllu: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
+	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
 	   --fdata=$(BLIND_TEST) \
 	   --fpred=$@
 	python ./fix-root.py $@
 
-$(EXP_OUT)/$(LANG)-$(FEAT)$(VER)-test.time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
+$(EXP)/$(LANG)-$(FEAT)$(VER)-test.time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	( time python run.py predict -d=$(GPU) -f=$(dir $<) --feat=$(FEAT) --tree  \
 	   --fdata=$(BLIND_TEST)  \
 	   --fpred=/dev/null; ) &> $@
 
-$(EXP_OUT)/$(LANG)-$(FEAT)$(VER)-test.cpu-time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
+$(EXP)/$(LANG)-$(FEAT)$(VER)-test.cpu-time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	( time CUDA_VISIBLE_DEVICES= python run.py predict -f=$(dir $<) --feat=$(FEAT) --tree \
 	   --fdata=$(BLIND_TEST)  \
 	   --fpred=/dev/null; ) &> $@
@@ -142,12 +139,12 @@ LANGS2=lv lt nl pl ru sk sv cs
 
 all:
 	for l in $(LANGS); do \
-	    nohup ${MAKE} GPU=$(GPU) LANG=$$l $(EXP)/$$l-$(FEAT)$(VER)/model &>> $(EXP)/$${l}-$(FEAT)$(VER).make; \
+	    $(MAKE) -s GPU=$(GPU) LANG=$$l FEAT=$(FEAT) EXP=$(EXP) VER=$(VER) $(EXP)/$${l}-$(FEAT)$(VER)-test.conllu &> $(EXP)/$${l}-$(FEAT)$(VER)-test.make; \
 	done
 
-all-tests:
+train:
 	for l in $(LANGS); do \
-	    $(MAKE) GPU=$(GPU) LANG=$$l FEAT=$(FEAT) EXP=$(EXP) VER=$(VER) $(EXP_OUT)/$${l}-$(FEAT)$(VER)-test.conllu &> $(EXP)/$${l}-$(FEAT)$(VER)-test.make; \
+	    nohup ${MAKE} -s GPU=$(GPU) LANG=$$l $(EXP)/$$l-$(FEAT)$(VER)/model &>> $(EXP)/$${l}-$(FEAT)$(VER).make; \
 	done
 
 # ----------------------------------------------------------------------
