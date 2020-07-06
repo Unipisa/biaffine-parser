@@ -110,7 +110,7 @@ class Model(nn.Module):
 
     def forward(self, words: torch.Tensor,
                 feats: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # words, feats are the first two in the batch from TextDataLoader.__iter__()
+        # words, feats are the first two items in the batch from TextDataLoader.__iter__()
         if words is None:
             words = feats[:,:,0] # drop subpiece dimension
         batch_size, seq_len = words.shape

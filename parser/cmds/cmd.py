@@ -11,7 +11,7 @@ from parser.utils.vocab import FieldVocab
 
 import torch
 import torch.nn as nn
-
+from torch.cuda import memory_allocated
 
 class CMD(object):
 
@@ -118,14 +118,17 @@ class CMD(object):
                 words, (feats, arcs, rels) = None, batch
                 mask = feats[:,:,0].ne(self.model.pad_index)
 
+            # print(f'Batch {step} GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
             # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
+            # print('After forward, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             if isinstance(self.model, nn.DataParallel) and len(self.model.device_ids) > 1:
                 loss = loss.mean()
             loss /= accumulation_steps
             loss.backward()
+            # print('GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
             nn.utils.clip_grad_norm_(self.model.parameters(),
                                      self.args.clip)
             if (step+1) % accumulation_steps == 0:  # Wait for several backward steps
@@ -138,7 +141,8 @@ class CMD(object):
                 if words is not None and not self.args.punct:
                     mask &= words.unsqueeze(-1).ne(self.puncts).all(-1)
                 if self.args.evaluate_in_training:                 # Evaluate the model when we...
-                    metric(arc_preds, rel_preds, arcs, rels, mask) # ...have no gradients accumulated
+                    with torch.no_grad():
+                        metric(arc_preds, rel_preds, arcs, rels, mask) # ...have no gradients accumulated
             total_loss += loss.item()
         total_loss /= len(loader)
 

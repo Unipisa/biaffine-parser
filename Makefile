@@ -5,7 +5,6 @@ FEAT = bert
 CONFIG = config.ini
 
 GPU = 0
-EMBED =
 
 #BUCKETS = --buckets=48
 #BATCH_SIZE = --batch-size=500
@@ -37,7 +36,7 @@ else ifeq ($(LANG), ba)
 else ifeq ($(LANG), bg)
   CORPUS=bg_btb
   RES2=Bulgarian-BTB
-  MODEL = -m=TurkuNLP/wikibert-base-bg-cased
+  MODEL = -m=DeepPavlov/bert-base-bg-cased
 else ifeq ($(LANG), cs) #dev PDT
   CORPUS=cs_pdt
   RES2=Czech-PDT
@@ -53,6 +52,7 @@ else ifeq ($(LANG), et) #dev EDT
 else ifeq ($(LANG), fi)
   CORPUS=fi_tdt
   RES2=Finnish-TDT
+  MODEL = -m=TurkuNLP/bert-base-finnish-cased-v1
   #MODEL = -m=TurkuNLP/wikibert-base-fi-cased
 else ifeq ($(LANG), fr)
   CORPUS=fr_sequoia

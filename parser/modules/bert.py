@@ -5,6 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoModel, AutoConfig
 import torch.nn.functional as F
 import torch
+from torch.cuda import memory_allocated
 
 from .scalar_mix import ScalarMix
 from .dropout import TokenDropout
@@ -36,7 +37,7 @@ class BertEmbedding(nn.Module):
         config = AutoConfig.from_pretrained(model, output_hidden_states=True,
                                             output_attentions=n_attentions!=0)
         self.bert = AutoModel.from_pretrained(model, config=config)
-        self.bert.requires_grad_( requires_grad)
+        self.bert.requires_grad_(requires_grad)
         self.n_layers = n_layers or self.bert.config.num_hidden_layers
         self.hidden_size = self.bert.config.hidden_size
         self.n_out = n_out or self.hidden_size
@@ -56,6 +57,7 @@ class BertEmbedding(nn.Module):
     def __repr__(self):
         s = self.__class__.__name__ + '('
         s += f"n_layers={self.n_layers}, n_out={self.n_out}, "
+        s += f"bert={self.bert}, "
         s += f"scalar_mix={self.scalar_mix}, "
         if self.n_attentions:
             s += f"n_attentions={self.n_attentions}, "
@@ -82,7 +84,9 @@ class BertEmbedding(nn.Module):
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
         bert_mask = pad_sequence(mask[mask].split(lens.tolist()), True)
         # return the hidden states of all layers
+        # print('<BERT, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
         outputs = self.bert(subwords, attention_mask=bert_mask.float()) # float for XLNET
+        # print('BERT>, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
         if self.use_hidden_states:
             bert = outputs[-2] if self.n_attentions else outputs[-1]
             # [n_layers, batch_size, n_subwords, hidden_size]

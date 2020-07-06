@@ -88,24 +88,22 @@ class Train(CMD):
         self.model = Model(args, mask_token_id=self.FEAT.mask_token_id)
         if self.WORD:
             self.model.load_pretrained(self.WORD.embed)
-        print(f"{self.model}\n")
         self.model = self.model.to(args.device)
         if torch.cuda.device_count() > 1:
             self.model = TransparentDataParallel(self.model)
+        print(f"{self.model}\n")
         if args.optimizer == 'adamw':
             self.optimizer = AdamW(self.model.parameters(),
                                    args.lr,
                                    (args.mu, args.nu),
                                    args.epsilon,
                                    args.decay)
-            # training_steps = len(train.loader) // self.args.accumulation_steps \
-            #                  * self.args.epochs
-            # warmup_steps = math.ceil(training_steps * self.args.warmup_steps_ratio)
-            # self.scheduler = get_linear_schedule_with_warmup(
-            #     self.optimizer, num_warmup_steps=warmup_steps,
-            #     num_training_steps=training_steps)
-            self.scheduler = ExponentialLR(self.optimizer,
-                                           args.decay**(1/args.decay_steps))
+            training_steps = len(train.loader) // self.args.accumulation_steps \
+                             * self.args.epochs
+            warmup_steps = math.ceil(training_steps * self.args.warmup_steps_ratio)
+            self.scheduler = get_linear_schedule_with_warmup(
+                self.optimizer, num_warmup_steps=warmup_steps,
+                num_training_steps=training_steps)
         else:
             self.optimizer = Adam(self.model.parameters(),
                                   args.lr,
