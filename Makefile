@@ -168,3 +168,9 @@ baltic:
 	   --fdata=$(subst $(LANG),$$l,$(BLIND_TEST)) \
 	   --fpred=$(EXP)/$$l-$(FEAT)-ba-test.conllu; \
 	done
+
+# ----------------------------------------------------------------------
+# Run tests
+
+test:
+	python -m unittest discover -s tests
