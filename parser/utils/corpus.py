@@ -143,7 +143,7 @@ class TextCorpus(Corpus):
                 else:
                     if not line.startswith('#'):
                         # append fake columns
-                        line = '{}\t{}'.format(line, '\t'.join(['' for i in range(len(CoNLL._fields) - len(line.split('\t')))]))
+                        line = '{}\t{}'.format(line, '\t'.join(['_' for i in range(len(CoNLL._fields) - len(line.split('\t')))]))
                         assert len(CoNLL._fields) == len(line.split('\t')), '{} - {} vs {}'.format(line, len(CoNLL._fields), len(line.split()))
                     lines.append(line)
 
