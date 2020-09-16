@@ -4,6 +4,8 @@ from collections import namedtuple
 from collections.abc import Iterable
 from .field import Field
 
+from tokenizer.tokenizer import Tokenizer
+
 import sys
 import math
 
@@ -115,3 +117,34 @@ class Corpus(object):
     def save(self, path):
         with open(path, 'w') as f:
             f.write(f"{self}\n")
+
+
+class TextCorpus(Corpus):
+    @classmethod
+    def load(cls, path, fields, tokenizer_lang, tokenizer_dir, use_gpu, verbose=True, max_sent_length=math.inf):
+        tokenizer = Tokenizer(lang=tokenizer_lang, dir=tokenizer_dir, use_gpu=use_gpu, verbose=True)
+
+        sentences = []
+        fields = [field if field is not None else Field(str(i))
+                  for i, field in enumerate(fields)]
+
+        with open(path, 'r') as f:
+            lines = []
+            for line in tokenizer.format(tokenizer.predict(f.read())):
+                line = line.strip()
+                if not line:
+                    if len(lines) > max_sent_length:
+                        print('Discarded sentence longer than max_sent_length:',
+                              len(lines), file=sys.stderr)
+                        lines = []
+                        continue
+                    sentences.append(Sentence(fields, lines))
+                    lines = []
+                else:
+                    if not line.startswith('#'):
+                        # append fake columns
+                        line = '{}\t{}'.format(line, '\t'.join(['' for i in range(len(CoNLL._fields) - len(line.split('\t')))]))
+                        assert len(CoNLL._fields) == len(line.split('\t')), '{} - {} vs {}'.format(line, len(CoNLL._fields), len(line.split()))
+                    lines.append(line)
+
+        return cls(fields, sentences)
