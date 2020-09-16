@@ -169,3 +169,19 @@ baltic:
 	   --fdata=$(subst $(LANG),$$l,$(BLIND_TEST)) \
 	   --fpred=$(EXP)/$$l-$(FEAT)-ba-test.conllu; \
 	done
+
+# ----------------------------------------------------------------------
+# Run tests
+
+test:
+	pytest -s tests
+
+RAW_TEXT_FILE = ''
+# raw text: example predict
+
+# example
+# make GPU=2 LAN=it CORPUS_DIR=/project/piqasso/Collection/IWPT20 RAW_TEXT_FILE=/project/piqasso/Collection/IWPT20/train-dev/UD_Italian-ISDT/it_isdt-ud-dev.txt exp/it-bert-raw-text.conllu
+$(EXP)/$(LAN)-$(FEAT)$(VER)-raw-text.conllu: $(EXP)/$(LAN)-$(FEAT)$(VER)/model
+	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
+	   --fdata=$(RAW_TEXT_FILE) \
+	   --fpred=$@ --raw-text --tokenizer-lang $(LAN)

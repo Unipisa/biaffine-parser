@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import argparse
 from datetime import datetime
 from parser import Model
 from parser.cmds.cmd import CMD
-from parser.utils.corpus import Corpus
+from parser.utils.corpus import Corpus, TextCorpus
 from parser.utils.data import TextDataset, batchify
 
 import torch
@@ -22,6 +23,15 @@ class Predict(CMD):
         subparser.add_argument('--fpred', default='pred.conllx',
                                help='path to predicted result')
 
+        subparser.add_argument('--raw-text', action='store_true',
+                               help='raw text as input')
+
+        subparser.add_argument('--tokenizer-lang', default=None,
+                               help='tokenizer language')
+
+        subparser.add_argument('--tokenizer-dir', default='.tokenizer-models',
+                               help='path to saved tokenizer models')
+
         return subparser
 
     def __call__(self, args):
@@ -30,7 +40,13 @@ class Predict(CMD):
         print("Load the dataset")
         if args.prob:
             self.fields = self.fields._replace(PHEAD=Field('probs'))
-        corpus = Corpus.load(args.fdata, self.fields)
+        if args.raw_text:
+            if args.tokenizer_lang is None:
+                raise argparse.ArgumentTypeError('With --raw-text param, it is mandatory specify the --tokenizer-lang param')
+
+            corpus = TextCorpus.load(args.fdata, self.fields, args.tokenizer_lang, args.tokenizer_dir, use_gpu=args.device != 1)
+        else:
+            corpus = Corpus.load(args.fdata, self.fields)
         dataset = TextDataset(corpus, [self.WORD, self.FEAT], args.buckets)
         # set the data loader
         dataset.loader = batchify(dataset, args.batch_size)
