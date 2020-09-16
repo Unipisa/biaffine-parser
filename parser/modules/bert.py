@@ -29,10 +29,11 @@ class BertEmbedding(nn.Module):
         weighted average with ScalarMix.
         :param use_hidden_states: use the output hidden states from bert if True, or else
         the outputs.
-        :param n_attentions: attention weights to return.
+        :param n_attentions: extract attention weights.
+        :param attention_layer: which attention layer weights to return.
         """
 
-        super(BertEmbedding, self).__init__()
+        super().__init__()
 
         config = AutoConfig.from_pretrained(model, output_hidden_states=True,
                                             output_attentions=n_attentions!=0)

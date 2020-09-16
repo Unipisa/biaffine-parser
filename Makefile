@@ -9,6 +9,7 @@ GPU = 0
 #BUCKETS = --buckets=48
 #BATCH_SIZE = --batch-size=500
 #MAX_SENT_LENGTH=--max-sent-length 140
+ATTN=--attention-layer 6
 
 #----------------------------------------------------------------------
 # Corpora
@@ -28,7 +29,7 @@ UD_TOOLS = $(CORPUS_DIR)/iwpt2020stdata/tools
 ifeq ($(LANG), ar)
   CORPUS=ar_padt
   RES2=Arabic-PADT
-  MODEL = -m=TurkuNLP/wikibert-base-ar-cased
+  MODEL = -m=asafaya/bert-large-arabic #TurkuNLP/wikibert-base-ar-cased
 else ifeq ($(LANG), ba)
   CORPUS=ba
   RES2=Baltic
@@ -36,7 +37,7 @@ else ifeq ($(LANG), ba)
 else ifeq ($(LANG), bg)
   CORPUS=bg_btb
   RES2=Bulgarian-BTB
-  MODEL = -m=DeepPavlov/bert-base-bg-cased
+  MODEL = -m=TurkuNLP/wikibert-base-bg-cased #iarfmoose/roberta-base-bulgarian
 else ifeq ($(LANG), cs) #dev PDT
   CORPUS=cs_pdt
   RES2=Czech-PDT
@@ -113,7 +114,7 @@ EXP = exp
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)/model:
 	python -u run.py train -p -d=$(GPU) -f=$(dir $@) \
-	   --conf=$(CONFIG) $(MODEL) \
+	   --conf=$(CONFIG) $(MODEL) $(ATTN) \
 	   --ftrain=$(CORPUS_TRAIN) $(MAX_SENT_LENGTH) $(BATCH_SIZE) $(BUCKETS) \
 	   --fdev=$(CORPUS_DEV) #--unk='[UNK]' --ftest=$(CORPUS_TEST) --seed=1
 
