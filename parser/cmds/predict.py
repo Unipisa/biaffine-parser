@@ -22,13 +22,8 @@ class Predict(CMD):
                                help='path to dataset')
         subparser.add_argument('--fpred', default='pred.conllx',
                                help='path to predicted result')
-
-        subparser.add_argument('--raw-text', action='store_true',
-                               help='raw text as input')
-
-        subparser.add_argument('--tokenizer-lang', default=None,
-                               help='tokenizer language')
-
+        subparser.add_argument('--text', metavar='LANGUAGE', default=None,
+                               help='parse plain text in the given language rather than CoNLLU files.')
         subparser.add_argument('--tokenizer-dir', default='.tokenizer-models',
                                help='path to saved tokenizer models')
 
@@ -40,11 +35,8 @@ class Predict(CMD):
         print("Load the dataset")
         if args.prob:
             self.fields = self.fields._replace(PHEAD=Field('probs'))
-        if args.raw_text:
-            if args.tokenizer_lang is None:
-                raise argparse.ArgumentTypeError('With --raw-text param, it is mandatory specify the --tokenizer-lang param')
-
-            corpus = TextCorpus.load(args.fdata, self.fields, args.tokenizer_lang, args.tokenizer_dir, use_gpu=args.device != 1)
+        if args.text:
+            corpus = TextCorpus.load(args.fdata, self.fields, args.text, args.tokenizer_dir, use_gpu=args.device != 1)
         else:
             corpus = Corpus.load(args.fdata, self.fields)
         dataset = TextDataset(corpus, [self.WORD, self.FEAT], args.buckets)
