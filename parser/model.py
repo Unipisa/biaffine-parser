@@ -14,7 +14,7 @@ from typing import Dict, Optional, Tuple, Any, List
 class Model(nn.Module):
 
     def __init__(self, args, mask_token_id=0):
-        super(Model, self).__init__()
+        super().__init__()
 
         self.args = args
         if args.n_embed:

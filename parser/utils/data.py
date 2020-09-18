@@ -13,12 +13,12 @@ from torch.utils.data import DataLoader, Dataset, Sampler
 class TextDataLoader(DataLoader):
 
     def __init__(self, *args, **kwargs):
-        super(TextDataLoader, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.fields = self.dataset.fields
 
     def __iter__(self):
-        for raw_batch in super(TextDataLoader, self).__iter__():
+        for raw_batch in super().__iter__():
             batch, device = [], 'cuda' if torch.cuda.is_available() else 'cpu'
             for data, field in zip(raw_batch, self.fields):
                 if isinstance(field, Field):
@@ -35,7 +35,7 @@ class TextDataLoader(DataLoader):
 class TextDataset(Dataset):
 
     def __init__(self, corpus, fields, n_buckets=1):
-        super(TextDataset, self).__init__()
+        super().__init__()
 
         self.corpus = corpus
         self.fields = list(chain(*[

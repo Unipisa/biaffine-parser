@@ -25,7 +25,12 @@ class Predict(CMD):
         return subparser
 
     def __call__(self, args):
-        super(Predict, self).__call__(args)
+        print("Load the model")
+        self.model = Model.load(args.model)
+        # override from CLI args
+        args = self.model.args.update(vars(args))
+
+        super().__call__(args)
 
         print("Load the dataset")
         if args.prob:
@@ -36,11 +41,6 @@ class Predict(CMD):
         dataset.loader = batchify(dataset, args.batch_size)
         print(f"{len(dataset)} sentences, "
               f"{len(dataset.loader)} batches")
-
-        print("Load the model")
-        self.model = Model.load(args.model)
-        self.model.args = args
-        print(f"{self.model}\n")
 
         print("Make predictions on the dataset")
         start = datetime.now()

@@ -169,3 +169,21 @@ baltic:
 	   --fdata=$(subst $(LANG),$$l,$(BLIND_TEST)) \
 	   --fpred=$(EXP)/$$l-$(FEAT)-ba-test.conllu; \
 	done
+
+# ----------------------------------------------------------------------
+# Run tests
+
+test:
+	pytest -s tests
+
+# ----------------------------------------------------------------------
+# Parse plain text
+
+TEXT_FILE=
+
+# example
+# make GPU=2 LAN=it CORPUS_DIR=/project/piqasso/Collection/IWPT20 TEXT_FILE=/project/piqasso/Collection/IWPT20/train-dev/UD_Italian-ISDT/it_isdt-ud-dev.txt exp/it-bert-raw-text.conllu
+$(EXP)/$(LAN)-$(FEAT)$(VER)-$(TEXT_FILE).conllu: $(EXP)/$(LAN)-$(FEAT)$(VER)/model
+	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
+	   --fdata=$(TEXT_FILE) \
+	   --fpred=$@ --text $(LAN)

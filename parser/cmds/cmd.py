@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch.cuda import memory_allocated
 
-class CMD(object):
+class CMD():
 
     def __call__(self, args):
         self.args = args
@@ -32,14 +32,12 @@ class CMD(object):
                                          tokenizer=tokenizer,
                                          fix_len=args.fix_len)
                 self.bos = self.FEAT.bos and bos
-                self.WORD.bos = self.bos # ensure representations of the same length
                 if hasattr(tokenizer, 'vocab'):
                     self.FEAT.vocab = tokenizer.vocab
                 else:
                     self.FEAT.vocab = FieldVocab(tokenizer.unk_token_id,
                                                  {tokenizer._convert_id_to_token(i): i
                                                   for i in range(len(tokenizer))})
-                args.feat_pad_index = self.FEAT.pad_index # so that it is saved correctly. Attardi
             else:
                 self.FEAT = Field('tags', bos=self.bos)
             self.ARC = Field('arcs', bos=self.bos, use_vocab=False,
@@ -49,6 +47,7 @@ class CMD(object):
                 if args.n_embed:
                     self.fields = CoNLL(FORM=(self.WORD, self.FEAT),
                                         HEAD=self.ARC, DEPREL=self.REL)
+                    self.WORD.bos = self.bos # ensure representations of the same length
                 else:
                     self.fields = CoNLL(FORM=self.FEAT,
                                         HEAD=self.ARC, DEPREL=self.REL)
@@ -60,7 +59,7 @@ class CMD(object):
                 self.fields = CoNLL(FORM=self.WORD, CPOS=self.FEAT,
                                     HEAD=self.ARC, DEPREL=self.REL)
 
-            train = Corpus.load(args.ftrain, self.fields, max_sent_length=args.max_sent_length)
+            train = Corpus.load(args.ftrain, self.fields, args.max_sent_length)
             if args.fembed:
                 embed = Embedding.load(args.fembed, args.unk)
             else:
@@ -70,7 +69,9 @@ class CMD(object):
             self.FEAT.build(train)
             self.REL.build(train)
             torch.save(self.fields, args.fields)
+            self.trainset = train  # pass it on to subclasses
         else:
+            self.trainset = None
             self.fields = torch.load(args.fields)
             if args.feat in ('char', 'bert'):
                 if isinstance(self.fields.FORM, tuple):
@@ -83,6 +84,7 @@ class CMD(object):
         self.puncts = torch.tensor([i for s, i in self.WORD.vocab.stoi.items()
                                     if ispunct(s)]).to(args.device) if self.WORD else []
 
+        # override parameters from embeddings:
         if self.WORD:
             args.update({
                 'n_words': self.WORD.vocab.n_init,
@@ -96,7 +98,6 @@ class CMD(object):
             'feat_pad_index': self.FEAT.pad_index,
         })
 
-        print(f"Override the default configs\n{args}")
         print("Features:")
         if self.WORD:
             print(f"   {self.WORD}")

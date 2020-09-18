@@ -19,7 +19,7 @@ else:
     CoNLL.__new__.__defaults__ = (None,) * 10
 
 
-class Sentence(object):
+class Sentence():
 
     def __init__(self, fields, lines):
         self.annotations = dict()

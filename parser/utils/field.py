@@ -5,12 +5,11 @@ from parser.utils.fn import pad
 from parser.utils.vocab import Vocab
 
 import torch
-import sys
 
-class RawField(object):
+class RawField():
 
     def __init__(self, name, fn=None):
-        super(RawField, self).__init__()
+        super().__init__()
 
         self.name = name
         self.fn = fn
@@ -143,7 +142,7 @@ class SubwordField(Field):
     def __init__(self, *args, **kwargs):
         tokenizer = kwargs.pop('tokenizer') if 'tokenizer' in kwargs else 0
         self.fix_len = kwargs.pop('fix_len') if 'fix_len' in kwargs else 0
-        super(SubwordField, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.pad = tokenizer.pad_token
         self.unk = tokenizer.unk_token
         self.bos = tokenizer.bos_token or tokenizer.cls_token

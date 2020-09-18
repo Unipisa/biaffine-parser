@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
-import math
+import argparse
 from datetime import datetime, timedelta
+import math
+from parser.config import Config
 from parser import Model
 from parser.cmds.cmd import CMD
 from parser.utils.corpus import Corpus
@@ -19,7 +21,7 @@ class TransparentDataParallel(nn.DataParallel):
     """custom class so that I can have other attributes than modules."""
 
     def __init__(self, module, **kwargs):
-        super(TransparentDataParallel, self).__init__(module, **kwargs)
+        super().__init__(module, **kwargs)
 
     def __getattr__(self, name):
         if name is not 'module':
@@ -37,6 +39,12 @@ class Train(CMD):
         subparser = parser.add_parser(
             name, help='Train a model.'
         )
+        # allow --conf only in train to avoid overriding model parameters in predict
+        subparser.add_argument('--conf', '-c', default='config.ini',
+                               help='path to config file (default config.ini)')
+        # use SUPPRESS, or else it will have a default that will override the value in config file
+        subparser.add_argument('--bert-model', '-m', default=argparse.SUPPRESS,
+                               help='pretrained BERT model')
         subparser.add_argument('--punct', action='store_true',
                                help='whether to include punctuation')
         subparser.add_argument('--ftrain', default='data/ptb/train.conllx',
@@ -53,13 +61,29 @@ class Train(CMD):
                                help='unk token in pretrained embeddings')
         subparser.add_argument('--max-sent-length', default=512, type=int,
                                help='max tokenized sentence length (longer ones are discarded)')
+        subparser.add_argument('--feat', default='bert',
+                               choices=['tag', 'char', 'bert'],
+                               help='choices of additional features')
+        subparser.add_argument('--batch-size', default=5000, type=int,
+                               help='batch size')
+        subparser.add_argument('--buckets', default=32, type=int,
+                               help='max num of buckets to use')
+        subparser.add_argument('--attention-layer', default=8, type=int,
+                               help='attention head')
 
         return subparser
 
     def __call__(self, args):
-        super(Train, self).__call__(args)
+        # override config from CLI parameters
+        args = Config(args.conf).update(vars(args))
 
-        train = Corpus.load(args.ftrain, self.fields, args.max_sent_length)
+        # loads train corpus into self.trainset
+        super().__call__(args)
+
+        print(f"Configuration parameters:\n{args}")
+
+        #train = Corpus.load(args.ftrain, self.fields, args.max_sent_length)
+        train = self.trainset
         dev = Corpus.load(args.fdev, self.fields, args.max_sent_length)
         if args.ftest:
             test = Corpus.load(args.ftest, self.fields, args.max_sent_length)
