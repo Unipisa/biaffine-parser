@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import argparse
 from datetime import datetime
 from parser import Model
 from parser.cmds.cmd import CMD
-from parser.utils.corpus import Corpus
+from parser.utils.corpus import Corpus, TextCorpus
 from parser.utils.data import TextDataset, batchify
 
 import torch
@@ -21,6 +22,10 @@ class Predict(CMD):
                                help='path to dataset')
         subparser.add_argument('--fpred', default='pred.conllx',
                                help='path to predicted result')
+        subparser.add_argument('--text', metavar='LANGUAGE', default=None,
+                               help='parse plain text in the given language rather than CoNLLU files.')
+        subparser.add_argument('--tokenizer-dir', default='.tokenizer-models',
+                               help='path to saved tokenizer models')
 
         return subparser
 
@@ -35,7 +40,10 @@ class Predict(CMD):
         print("Load the dataset")
         if args.prob:
             self.fields = self.fields._replace(PHEAD=Field('probs'))
-        corpus = Corpus.load(args.fdata, self.fields)
+        if args.text:
+            corpus = TextCorpus.load(args.fdata, self.fields, args.text, args.tokenizer_dir, use_gpu=args.device != 1)
+        else:
+            corpus = Corpus.load(args.fdata, self.fields)
         dataset = TextDataset(corpus, [self.WORD, self.FEAT], args.buckets)
         # set the data loader
         dataset.loader = batchify(dataset, args.batch_size)
