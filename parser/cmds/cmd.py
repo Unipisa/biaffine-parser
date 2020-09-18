@@ -26,8 +26,7 @@ class CMD():
                 self.FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos,
                                          fix_len=args.fix_len, tokenize=list)
             elif args.feat == 'bert':
-                from transformers import AutoTokenizer
-                tokenizer = AutoTokenizer.from_pretrained(args.bert_model)
+                tokenizer = SubwordField.tokenizer(args.bert_model)
                 self.FEAT = SubwordField('bert',
                                          tokenizer=tokenizer,
                                          fix_len=args.fix_len)
@@ -68,11 +67,23 @@ class CMD():
                 self.WORD.build(train, args.min_freq, embed)
             self.FEAT.build(train)
             self.REL.build(train)
+            if args.feat == 'bert':
+                # do not save the tokenize funztion, or else it might be incompatible with new releases
+                tokenize = self.FEAT.tokenize # save it
+                self.FEAT.tokenize = None
             torch.save(self.fields, args.fields)
+            if args.feat == 'bert':
+                self.FEAT.tokenize = tokenize # restore
             self.trainset = train  # pass it on to subclasses
         else:
             self.trainset = None
             self.fields = torch.load(args.fields)
+            if args.feat == 'bert':
+                tokenizer = SubwordField.tokenizer(args.bert_model)
+                if args.n_embed:
+                    self.fields.FORM[1].tokenize = tokenizer.tokenize
+                else:
+                    self.fields.FORM.tokenize = tokenizer.tokenize
             if args.feat in ('char', 'bert'):
                 if isinstance(self.fields.FORM, tuple):
                     self.WORD, self.FEAT = self.fields.FORM

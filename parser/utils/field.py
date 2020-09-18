@@ -147,7 +147,20 @@ class SubwordField(Field):
         self.unk = tokenizer.unk_token
         self.bos = tokenizer.bos_token or tokenizer.cls_token
         self.mask_token_id = tokenizer.mask_token_id
-        self.tokenize = tokenize=tokenizer.tokenize
+        self.tokenize = tokenizer.tokenize
+
+    @classmethod
+    def tokenizer(cls, name):
+        """
+        Create an instance of tokenizer from either path or name.
+        :param name: path or name of tokenizer.
+        """
+
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(name)
+        tokenizer.bos_token = tokenizer.bos_token or tokenizer.cls_token
+        tokenizer.eos_token = tokenizer.eos_token or tokenizer.sep_token
+        return tokenizer
 
     def build(self, corpus, min_freq=1, embed=None):
         if hasattr(self, 'vocab'):
