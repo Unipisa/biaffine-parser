@@ -156,7 +156,7 @@ class SubwordField(Field):
         :param name: path or name of tokenizer.
         """
 
-        from transformers import AutoTokenizer
+        from transformers import AutoTokenizer, AutoConfig
         tokenizer = AutoTokenizer.from_pretrained(name)
         tokenizer.bos_token = tokenizer.bos_token or tokenizer.cls_token
         tokenizer.eos_token = tokenizer.eos_token or tokenizer.sep_token

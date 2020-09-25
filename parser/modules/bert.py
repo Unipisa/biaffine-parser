@@ -10,33 +10,46 @@ from torch.cuda import memory_allocated
 from .scalar_mix import ScalarMix
 from .dropout import TokenDropout
 
+from parser.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
 class BertEmbedding(nn.Module):
 
     def __init__(self, model, n_layers, n_out, requires_grad=False,
                  mask_token_id=0, token_dropout=0.0, mix_dropout=0.0,
-                 use_hidden_states=True, n_attentions=0, attention_layer=8):
+                 use_hidden_states=True, use_attentions=False, attention_layer=8):
         """
-        :param model: path or name of the pretrained model.
+        A module that directly utilizes the pretrained models in `transformers`_ to produce BERT representations.
+
+        While mainly tailored to provide input preparation and post-processing for the BERT model,
+        it is also compatiable with other pretrained language models like XLNet, RoBERTa and ELECTRA, etc.
+
+        :param model (str): path or name of the pretrained model.
         :param n_layers: number of layers from the model to use.
         If 0, use all layers.
-        :param n_out: the requested size of the embeddings.
-        If 0, use the size of the pretrained embedding model
-        :param token_dropout: replace input wordpieces with [MASK] with this probability.
-        Not done if parameter is 0.0.
+        :param n_out (int): the requested size of the embeddings.
+            If 0, use the size of the pretrained embedding model
+        :param token_dropout (float): replace input wordpieces with [MASK] with this probability.
+            Not done if parameter is 0.0.
         :param requires_grad: whether to fine tune the embeddings.
         :param mask_token_id: the value of the [MASK] token to use for dropped tokens.
         :param mix_dropout: drop layers with this probability when comuting their
-        weighted average with ScalarMix.
+            weighted average with ScalarMix.
         :param use_hidden_states: use the output hidden states from bert if True, or else
-        the outputs.
-        :param n_attentions: extract attention weights.
+            the outputs.
+        :param use_attentions: extract attention weights.
         :param attention_layer: which attention layer weights to return.
+
+    .. _transformers:
+        https://github.com/huggingface/transformers
         """
 
         super().__init__()
 
         config = AutoConfig.from_pretrained(model, output_hidden_states=True,
-                                            output_attentions=n_attentions!=0)
+                                            output_attentions=use_attentions)
         self.bert = AutoModel.from_pretrained(model, config=config)
         self.bert.requires_grad_(requires_grad)
         self.n_layers = n_layers or self.bert.config.num_hidden_layers
@@ -46,7 +59,7 @@ class BertEmbedding(nn.Module):
         self.requires_grad = requires_grad
         self.use_hidden_states = use_hidden_states
         self.mask_token_id = mask_token_id
-        self.n_attentions = n_attentions
+        self.use_attentions = use_attentions
         self.attention_layer = attention_layer
         self.head = 0
 
@@ -60,8 +73,8 @@ class BertEmbedding(nn.Module):
         s += f"n_layers={self.n_layers}, n_out={self.n_out}, "
         s += f"bert={self.bert}, "
         s += f"scalar_mix={self.scalar_mix}, "
-        if self.n_attentions:
-            s += f"n_attentions={self.n_attentions}, "
+        if self.use_attentions:
+            s += f"use_attentions={self.use_attentions}, "
         if self.hidden_size != self.n_out:
             s += f"projection={self.projection}, "
         s += f"pad_index={self.pad_index}, "
@@ -84,12 +97,15 @@ class BertEmbedding(nn.Module):
         # [batch_size, n_subwords]
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
         bert_mask = pad_sequence(mask[mask].split(lens.tolist()), True)
+        if subwords.shape[1] > self.bert.config.max_position_embeddings:
+            logger.warn(f"Tokenized sequence is longer than the transformer can handle: "
+                        f"({subwords.shape[1]} > {self.bert.config.max_position_embeddings})")
         # return the hidden states of all layers
         # print('<BERT, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
         outputs = self.bert(subwords, attention_mask=bert_mask.float()) # float for XLNET
         # print('BERT>, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
         if self.use_hidden_states:
-            bert = outputs[-2] if self.n_attentions else outputs[-1]
+            bert = outputs[-2] if self.use_attentions else outputs[-1]
             # [n_layers, batch_size, n_subwords, hidden_size]
             bert = bert[-self.n_layers:]
             # [batch_size, n_subwords, hidden_size]
@@ -105,7 +121,7 @@ class BertEmbedding(nn.Module):
         # [batch_size, seq_len, hidden_size]
         embed = embed.sum(2) / bert_lens.unsqueeze(-1) # sum wordpieces
         seq_attn = None
-        if self.n_attentions:
+        if self.use_attentions:
             # (a list of layers) = [ [batch, num_heads, sent_len, sent_len] ]
             attns = outputs[-1]
             # [batch, n_subwords, n_subwords]
@@ -123,7 +139,6 @@ class BertEmbedding(nn.Module):
             for i, attn_i in enumerate(sub_attn):
                 size = sub_masks[i].sum(0)
                 attn_i = attn_i.view(size, size)
-                size = min(size, self.n_attentions)
                 seq_attn[i,:size,:size] = attn_i
         if hasattr(self, 'projection'):
             embed = self.projection(embed)

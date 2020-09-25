@@ -8,6 +8,7 @@ from tokenizer.tokenizer import Tokenizer
 
 import sys
 import math
+from parser.utils.logging import logger
 
 if 'dedfaults' in namedtuple.__code__.co_varnames[:namedtuple.__code__.co_argcount]:
     CoNLL = namedtuple(typename='CoNLL',
@@ -103,7 +104,7 @@ class Corpus(object):
                 line = line.strip()
                 if not line:
                     if len(lines) > max_sent_length:
-                        print('Discarded sentence longer than max_sent_length:',
+                        logger.info('Discarded sentence longer than max_sent_length:',
                               len(lines), file=sys.stderr)
                         lines = []
                         continue
@@ -115,8 +116,11 @@ class Corpus(object):
         return cls(fields, sentences)
 
     def save(self, path):
-        with open(path, 'w') as f:
-            f.write(f"{self}\n")
+        if path:
+            with open(path, 'w') as f:
+                f.write(f"{self}\n")
+        else:
+            print(self)
 
 
 class TextCorpus(Corpus):
@@ -134,7 +138,7 @@ class TextCorpus(Corpus):
                 line = line.strip()
                 if not line:
                     if len(lines) > max_sent_length:
-                        print('Discarded sentence longer than max_sent_length:',
+                        logger.info('Discarded sentence longer than max_sent_length:',
                               len(lines), file=sys.stderr)
                         lines = []
                         continue

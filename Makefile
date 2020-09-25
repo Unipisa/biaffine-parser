@@ -9,7 +9,7 @@ GPU = 0
 #BUCKETS = --buckets=48
 #BATCH_SIZE = --batch-size=500
 #MAX_SENT_LENGTH=--max-sent-length 140
-ATTN=--attention-layer 6
+#ATTN=--attention-layer=6
 
 #----------------------------------------------------------------------
 # Corpora
@@ -17,7 +17,6 @@ ATTN=--attention-layer 6
 CORPUS_DIR = ..
 CORPUS_TRAIN = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-train.conllu
 CORPUS_DEV = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-dev.conllu
-CORPUS_TEST = $(CORPUS_DIR)/test-turkunlp/$(LANG)2.conllu
 
 #BLIND_TEST=$(CORPUS_DIR)/test-udpipe/$(LANG).conllu
 #BLIND_TEST=$(CORPUS_DIR)/../test-stanza-sent/$(LANG).conllu
@@ -37,7 +36,7 @@ else ifeq ($(LANG), ba)
 else ifeq ($(LANG), bg)
   CORPUS=bg_btb
   RES2=Bulgarian-BTB
-  MODEL = -m=TurkuNLP/wikibert-base-bg-cased #iarfmoose/roberta-base-bulgarian
+  MODEL = -m=DeepPavlov/bert-base-bg-cased #TurkuNLP/wikibert-base-bg-cased #iarfmoose/roberta-base-bulgarian
 else ifeq ($(LANG), cs) #dev PDT
   CORPUS=cs_pdt
   RES2=Czech-PDT
@@ -55,6 +54,7 @@ else ifeq ($(LANG), fi)
   RES2=Finnish-TDT
   MODEL = -m=TurkuNLP/bert-base-finnish-cased-v1
   #MODEL = -m=TurkuNLP/wikibert-base-fi-cased
+  ATTN=--attention-layer=8
 else ifeq ($(LANG), fr)
   CORPUS=fr_sequoia
   RES2=French-Sequoia
@@ -66,7 +66,8 @@ else ifeq ($(LANG), it)
 else ifeq ($(LANG), lt)
   CORPUS=lt_alksnis
   RES2=Lithuanian-ALKSNIS
-  MODEL = -m=TurkuNLP/wikibert-base-lt-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-lt-cased
+  ATTN=--attention-layer=8
 else ifeq ($(LANG), lv)
   CORPUS=lv_lvtb
   RES2=Latvian-LVTB
@@ -74,7 +75,8 @@ else ifeq ($(LANG), lv)
 else ifeq ($(LANG), nl) #dev Alpino
   CORPUS=nl
   RES2=Dutch
-  MODEL = -m=TurkuNLP/wikibert-base-nl-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-nl-cased
+  MODEL = -m=wietsedv/bert-base-dutch-cased
 else ifeq ($(LANG), pl) #dev LFG
   CORPUS=pl
   RES2=Polish
@@ -94,7 +96,8 @@ else ifeq ($(LANG), sv)
 else ifeq ($(LANG), ta)
   CORPUS=ta_ttb
   RES2=Tamil-TTB
-  MODEL = -m=bert-base-multilingual-cased
+  BLIND_TEST = $(CORPUS_DIR)/test-udpipe/$(LANG).conllu
+  #MODEL = -m=monsoon-nlp/tamillion
 else ifeq ($(LANG), uk)
   CORPUS=uk_iu
   RES2=Ukrainian-IU
@@ -120,18 +123,18 @@ $(EXP)/$(LANG)-$(FEAT)$(VER)/model:
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)-test.conllu: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
-	   --fdata=$(BLIND_TEST) \
+	   $(BLIND_TEST) \
 	   --fpred=$@
 	python ./fix-root.py $@
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)-test.time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	( time python run.py predict -d=$(GPU) -f=$(dir $<) --feat=$(FEAT) --tree  \
-	   --fdata=$(BLIND_TEST)  \
+	   $(BLIND_TEST)  \
 	   --fpred=/dev/null; ) &> $@
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)-test.cpu-time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	( time CUDA_VISIBLE_DEVICES= python run.py predict -f=$(dir $<) --feat=$(FEAT) --tree \
-	   --fdata=$(BLIND_TEST)  \
+	   $(BLIND_TEST)  \
 	   --fpred=/dev/null; ) &> $@
 
 LANGS=ar bg cs en et fi fr it lv lt nl pl ru sk sv ta uk 
@@ -166,7 +169,7 @@ baltic:
 	for l in et lt lv; do \
 	  python run.py predict -d=$(GPU) --feat=$(FEAT) \
 	   -f=$(EXP)/ba-$(FEAT) --tree \
-	   --fdata=$(subst $(LANG),$$l,$(BLIND_TEST)) \
+	   $(subst $(LANG),$$l,$(BLIND_TEST)) \
 	   --fpred=$(EXP)/$$l-$(FEAT)-ba-test.conllu; \
 	done
 
@@ -184,6 +187,6 @@ TEXT_FILE=
 # example
 # make GPU=2 LAN=it CORPUS_DIR=/project/piqasso/Collection/IWPT20 TEXT_FILE=/project/piqasso/Collection/IWPT20/train-dev/UD_Italian-ISDT/it_isdt-ud-dev.txt exp/it-bert-raw-text.conllu
 $(EXP)/$(LAN)-$(FEAT)$(VER)-$(TEXT_FILE).conllu: $(EXP)/$(LAN)-$(FEAT)$(VER)/model
-	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
-	   --fdata=$(TEXT_FILE) \
-	   --fpred=$@ --text $(LAN)
+	python run.py predict -d=$(GPU) -f=$(dir $<) --tree --text $(LAN) \
+	   $(TEXT_FILE) \
+	   --fpred=$@

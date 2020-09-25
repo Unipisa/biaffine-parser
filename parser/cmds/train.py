@@ -3,18 +3,20 @@
 import argparse
 from datetime import datetime, timedelta
 import math
-from parser.config import Config
+from parser.utils.config import Config
 from parser import Model
 from parser.cmds.cmd import CMD
 from parser.utils.corpus import Corpus
 from parser.utils.data import TextDataset, batchify
 from parser.utils.metric import Metric
+from parser.utils.logging import logger
 
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
+
 
 
 class TransparentDataParallel(nn.DataParallel):
@@ -47,9 +49,9 @@ class Train(CMD):
                                help='pretrained BERT model')
         subparser.add_argument('--punct', action='store_true',
                                help='whether to include punctuation')
-        subparser.add_argument('--ftrain', default='data/ptb/train.conllx',
+        subparser.add_argument('--ftrain', required=True,
                                help='path to train file')
-        subparser.add_argument('--fdev', default='data/ptb/dev.conllx',
+        subparser.add_argument('--fdev', required=True,
                                help='path to dev file')
         subparser.add_argument('--ftest', default='',
                                help='path to test file')
@@ -76,11 +78,12 @@ class Train(CMD):
     def __call__(self, args):
         # override config from CLI parameters
         args = Config(args.conf).update(vars(args))
+        args.n_attentions = args.use_attentions #  back compatibility
 
         # loads train corpus into self.trainset
         super().__call__(args)
 
-        print(f"Configuration parameters:\n{args}")
+        logger.info(f"Configuration parameters:\n{args}")
 
         #train = Corpus.load(args.ftrain, self.fields, args.max_sent_length)
         train = self.trainset
@@ -97,25 +100,25 @@ class Train(CMD):
         dev.loader = batchify(dev, args.batch_size)
         if args.ftest:
             test.loader = batchify(test, args.batch_size)
-        print(f"{'train:':6} {len(train):5} sentences, "
+        logger.info(f"{'train:':6} {len(train):5} sentences, "
               f"{len(train.loader):3} batches, "
               f"{len(train.buckets)} buckets")
-        print(f"{'dev:':6} {len(dev):5} sentences, "
+        logger.info(f"{'dev:':6} {len(dev):5} sentences, "
               f"{len(dev.loader):3} batches, "
               f"{len(train.buckets)} buckets")
         if args.ftest:
-            print(f"{'test:':6} {len(test):5} sentences, "
+            logger.info(f"{'test:':6} {len(test):5} sentences, "
                   f"{len(test.loader):3} batches, "
                   f"{len(train.buckets)} buckets")
 
-        print("Create the model")
+        logger.info("Create the model")
         self.model = Model(args, mask_token_id=self.FEAT.mask_token_id)
         if self.WORD:
             self.model.load_pretrained(self.WORD.embed)
         self.model = self.model.to(args.device)
         if torch.cuda.device_count() > 1:
             self.model = TransparentDataParallel(self.model)
-        print(f"{self.model}\n")
+        logger.info(f"{self.model}\n")
         if args.optimizer == 'adamw':
             self.optimizer = AdamW(self.model.parameters(),
                                    args.lr,
@@ -142,14 +145,14 @@ class Train(CMD):
         for epoch in range(1, args.epochs + 1):
             start = datetime.now()
 
-            print(f"Epoch {epoch} / {args.epochs}:")
+            logger.info(f"Epoch {epoch} / {args.epochs}:")
             loss, train_metric = self.train(train.loader)
-            print(f"{'train:':6} Loss: {loss:.4f} {train_metric}")
+            logger.info(f"{'train:':6} Loss: {loss:.4f} {train_metric}")
             loss, dev_metric = self.evaluate(dev.loader)
-            print(f"{'dev:':6} Loss: {loss:.4f} {dev_metric}")
+            logger.info(f"{'dev:':6} Loss: {loss:.4f} {dev_metric}")
             if args.ftest:
                 loss, test_metric = self.evaluate(test.loader)
-                print(f"{'test:':6} Loss: {loss:.4f} {test_metric}")
+                logger.info(f"{'test:':6} Loss: {loss:.4f} {test_metric}")
 
             t = datetime.now() - start
             # save the model if it is the best so far
@@ -159,9 +162,9 @@ class Train(CMD):
                     self.model.module.save(args.model)
                 else:
                     self.model.save(args.model)
-                print(f"{t}s elapsed (saved)\n")
+                logger.info(f"{t}s elapsed (saved)\n")
             else:
-                print(f"{t}s elapsed\n")
+                logger.info(f"{t}s elapsed\n")
             total_time += t
             if epoch - best_e >= args.patience:
                 break
@@ -169,8 +172,8 @@ class Train(CMD):
         if args.ftest:
             loss, metric = self.evaluate(test.loader)
 
-        print(f"max score of dev is {best_metric.score:.2%} at epoch {best_e}")
+        logger.info(f"max score of dev is {best_metric.score:.2%} at epoch {best_e}")
         if args.ftest:
-            print(f"the score of test at epoch {best_e} is {metric.score:.2%}")
-        print(f"average time of each epoch is {total_time / epoch}s")
-        print(f"{total_time}s elapsed")
+            logger.info(f"the score of test at epoch {best_e} is {metric.score:.2%}")
+        logger.info(f"average time of each epoch is {total_time / epoch}s")
+        logger.info(f"{total_time}s elapsed")

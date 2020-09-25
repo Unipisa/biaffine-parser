@@ -41,8 +41,9 @@ class Model(nn.Module):
                                             token_dropout=args.token_dropout,
                                             mix_dropout=args.mix_dropout,
                                             use_hidden_states=args.use_hidden_states,
-                                            n_attentions=args.n_mlp_arc if args.n_attentions else 0,
+                                            use_attentions=args.use_attentions,
                                             attention_layer=args.attention_layer)
+            #self.args.n_mlp_arc = self.feat_embed.bert.config.max_position_embeddings
             self.args.n_feat_embed = self.feat_embed.n_out # taken from the model
             self.args.n_bert_layers = self.feat_embed.n_layers # taken from the model
             self.pad_index = self.feat_embed.pad_index     # taken from the model
@@ -89,7 +90,7 @@ class Model(nn.Module):
                                  bias_y=True)
 
         # transformer attention
-        if args.n_attentions:
+        if args.use_attentions:
             self.attn_mix = nn.Parameter(torch.randn(1))
 
         self.criterion = nn.CrossEntropyLoss()

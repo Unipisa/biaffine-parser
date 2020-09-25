@@ -8,6 +8,7 @@ from parser.utils.field import Field, SubwordField
 from parser.utils.fn import ispunct, numericalize
 from parser.utils.metric import AttachmentMetric
 from parser.utils.vocab import FieldVocab
+from parser.utils.logging import logger
 
 import torch
 import torch.nn as nn
@@ -20,7 +21,7 @@ class CMD():
         if not os.path.exists(args.file):
             os.mkdir(args.file)
         if not os.path.exists(args.fields) or args.preprocess:
-            print("Preprocess the data")
+            logger.info("Preprocess the data")
             self.WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=args.lower)
             if args.feat == 'char':
                 self.FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos,
@@ -109,10 +110,10 @@ class CMD():
             'feat_pad_index': self.FEAT.pad_index,
         })
 
-        print("Features:")
+        logger.info("Features:")
         if self.WORD:
-            print(f"   {self.WORD}")
-        print(f"   {self.FEAT}\n   {self.ARC}\n   {self.REL}")
+            logger.info(f"   {self.WORD}")
+        logger.info(f"   {self.FEAT}\n   {self.ARC}\n   {self.REL}")
 
     def train(self, loader):
         self.model.train()
