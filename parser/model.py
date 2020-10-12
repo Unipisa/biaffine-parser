@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM
+from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM # , DeepBiaffine
 from parser.modules.dropout import IndependentDropout, SharedDropout
 from parser.utils.alg import eisner
 from parser.utils.fn import istree
@@ -8,6 +8,7 @@ from parser.utils.fn import istree
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn.functional as F
 
 from typing import Dict, Optional, Tuple, Any, List
 
@@ -32,7 +33,7 @@ class Model(nn.Module):
             self.pad_index = args.pad_index
         elif args.feat == 'bert':
             if not hasattr(args, 'token_dropout'):
-                args.token_dropout = 0.0 # PATCH
+                args.token_dropout = 0.0 # temporary PATCH
             self.feat_embed = BertEmbedding(model=args.bert_model,
                                             n_layers=args.n_bert_layers,
                                             n_out=args.n_feat_embed,
@@ -91,7 +92,12 @@ class Model(nn.Module):
 
         # transformer attention
         if args.use_attentions:
-            self.attn_mix = nn.Parameter(torch.randn(1))
+            self.attn_mix = nn.Parameter(torch.randn(1)) #2)) # 1))
+
+        # # distance
+        # self.args.distance = False # DEBUG
+        # if self.args.distance:
+        #     self.distance = DeepBiaffine(mlp_input_size, mlp_input_size, self.args.deep_biaff_hidden_dim, 1, dropout=args.mlp_dropout)
 
         self.criterion = nn.CrossEntropyLoss()
 
@@ -118,6 +124,8 @@ class Model(nn.Module):
         mask = words.ne(self.pad_index)
         # get the mask and lengths of given batch
         lens = mask.sum(dim=1)
+        # feat_embed: [batch_size, seq_len, n_feat_embed]
+        # attn: [batch_size, seq_len, seq_len]
         feat_embed, attn = self.feat_embed(feats)
         if self.word_embed:
             ext_words = words
@@ -157,17 +165,35 @@ class Model(nn.Module):
 
         # mix bert attentions
         if attn is not None:
-            s_arc += self.attn_mix * attn
+            s_arc += self.attn_mix[0] * attn
+            # s_rel += self.attn_mix[1] * attn.unsqueeze(-1)
+
+        # # head-dependent distance
+        # if self.args.distance:
+        #     # @see https://arxiv.org/pdf/1901.10457.pdf
+        #     arange = torch.arange(words.size(1), device=words.device)
+        #     head_offset = arange.view(1, 1, -1).expand(words.size(0), -1, -1) \
+        #                   - arange.view(1, -1, 1).expand(words.size(0), -1, -1)
+        #     dist_scores = self.distance(x, x).squeeze(3)
+        #     dist_pred = 1 + F.softplus(dist_scores)
+        #     dist_target = torch.abs(head_offset)
+        #     dist_cauchy = -torch.log(1 + (dist_target.float() - dist_pred)**2/2)
+        #     s_arc += dist_cauchy.detach()
+        # else:
+        #     dist_cauchy = None
+
         # set the scores that exceed the length of each sentence to -inf
         s_arc.masked_fill_(~mask.unsqueeze(1), float('-inf'))
         # Lower the diagonal, because the head of a word can't be itself.
         s_arc += torch.diag(s_arc.new(seq_len).fill_(float('-inf')))
 
-        return s_arc, s_rel
+        return s_arc, s_rel #, dist_cauchy
+
 
     def loss(self, s_arc: torch.Tensor, s_rel: torch.Tensor,
              arcs: torch.Tensor, rels: torch.Tensor,
              mask: torch.Tensor) -> torch.Tensor:
+             # dist_cauchy: torch.Tensor = None
         """
         Computes the arc and tag loss for a sequence given gold heads and tags.
         Parameters
@@ -189,11 +215,14 @@ class Model(nn.Module):
         mask : ``torch.Tensor``, required.
             A mask of shape (batch_size, sequence_length), denoting unpadded
             elements in the sequence.
+        # dist_cauchy: ``torch.Tensor``, optional.
+        #     log of distance probability distribution of head offsets.
         Returns
         -------
         loss : ``torch.Tensor``.
             The sum of the cross-entropy losses from the arcs and rels predictions.
         """
+        heads = arcs
         s_arc, arcs = s_arc[mask], arcs[mask]
         s_rel, rels = s_rel[mask], rels[mask]
         # select the predicted relations towards the correct heads
@@ -201,7 +230,15 @@ class Model(nn.Module):
         arc_loss = self.criterion(s_arc, arcs)
         rel_loss = self.criterion(s_rel, rels)
 
-        return arc_loss + rel_loss
+        loss = arc_loss + rel_loss
+
+        # if dist_cauchy is not None:
+        #     #dist_cauchy = torch.gather(dist_cauchy[:, 1:], 2, heads.unsqueeze(2))
+        #     dist_cauchy = torch.gather(dist_cauchy, 2, heads.unsqueeze(2))
+        #     loss -= dist_cauchy.sum()
+
+        return loss
+
 
     def decode(self, s_arc: torch.Tensor, s_rel: torch.Tensor,
                mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

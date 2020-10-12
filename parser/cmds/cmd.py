@@ -31,7 +31,7 @@ class CMD():
                 self.FEAT = SubwordField('bert',
                                          tokenizer=tokenizer,
                                          fix_len=args.fix_len)
-                self.bos = self.FEAT.bos and bos
+                self.bos = self.FEAT.bos or bos
                 if hasattr(tokenizer, 'vocab'):
                     self.FEAT.vocab = tokenizer.vocab
                 else:
@@ -135,8 +135,9 @@ class CMD():
             # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
+            #s_arc, s_rel, dist_cauchy = self.model(words, feats)
             # print('After forward, GPU MiB:', memory_allocated() // (1024*1024)) # DEBUG
-            loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
+            loss = self.model.loss(s_arc, s_rel, arcs, rels, mask) #, dist_cauchy)
             if isinstance(self.model, nn.DataParallel) and len(self.model.device_ids) > 1:
                 loss = loss.mean()
             loss /= accumulation_steps
@@ -178,7 +179,8 @@ class CMD():
             # ignore the BOS token at the start of each sentence
             mask[:, 0] = 0
             s_arc, s_rel = self.model(words, feats)
-            loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
+            #s_arc, s_rel, dist_cauchy = self.model(words, feats)
+            loss = self.model.loss(s_arc, s_rel, arcs, rels, mask) # , dist_cauchy)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
             # ignore all punctuation if not specified
             if words is not None and self.puncts is not None:
@@ -206,6 +208,7 @@ class CMD():
             mask[:, 0] = 0
             lens = mask.sum(1).tolist()
             s_arc, s_rel = self.model(words, feats)
+            #s_arc, s_rel, dist_cauchy = self.model(words, feats)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask)
             arcs.extend(arc_preds[mask].split(lens))
             rels.extend(rel_preds[mask].split(lens))

@@ -70,8 +70,10 @@ class Train(CMD):
                                help='batch size')
         subparser.add_argument('--buckets', default=32, type=int,
                                help='max num of buckets to use')
-        subparser.add_argument('--attention-layer', default=8, type=int,
+        subparser.add_argument('--attention-layer', default=argparse.SUPPRESS, type=int,
                                help='attention head')
+        # subparser.add_argument('--distance', action='store_true',
+        #                        help='whether to use distance to heads')
 
         return subparser
 

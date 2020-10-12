@@ -19,7 +19,7 @@ CORPUS_TRAIN = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-train.conllu
 CORPUS_DEV = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-dev.conllu
 
 #BLIND_TEST=$(CORPUS_DIR)/test-udpipe/$(LANG).conllu
-#BLIND_TEST=$(CORPUS_DIR)/../test-stanza-sent/$(LANG).conllu
+#BLIND_TEST=$(CORPUS_DIR)/test-stanza-sent/$(LANG).conllu
 #BLIND_TEST=../EDparser/data/iwpt2020/test-udpipe/$(LANG).conllu
 BLIND_TEST=../iwpt2020stdata/sysoutputs/turkunlp/primary/$(LANG).conllu
 
@@ -32,18 +32,30 @@ ifeq ($(LANG), ar)
 else ifeq ($(LANG), ba)
   CORPUS=ba
   RES2=Baltic
-  MODEL = -m=TurkuNLP/wikibert-base-lv-cased
+  #MODEL = -m=TurkuNLP/wikibert-base-lv-cased
 else ifeq ($(LANG), bg)
   CORPUS=bg_btb
   RES2=Bulgarian-BTB
-  MODEL = -m=DeepPavlov/bert-base-bg-cased #TurkuNLP/wikibert-base-bg-cased #iarfmoose/roberta-base-bulgarian
+  MODEL = -m=DeepPavlov/bert-base-bg-cs-pl-ru-cased #TurkuNLP/wikibert-base-bg-cased #iarfmoose/roberta-base-bulgarian
 else ifeq ($(LANG), cs) #dev PDT
   CORPUS=cs_pdt
   RES2=Czech-PDT
   MODEL = -m=DeepPavlov/bert-base-bg-cs-pl-ru-cased
+else ifeq ($(LANG), zh)
+  CORPUS=zh
+  CORPUS_TRAIN = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-train.conllu
+  CORPUS_DEV = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-dev.conllu
+  BLIND_TEST = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-test.conllu
+  MODEL = -m=hfl/chinese-electra-base-discriminator # bert-base-chinese # hfl/chinese-electra-large-discriminator
 else ifeq ($(LANG), en)
   CORPUS=en_ewt
   RES2=English-EWT
+  MODEL = -m=google/electra-base-discriminator
+else ifeq ($(LANG), ptb)
+  CORPUS=en_ptb
+  CORPUS_TRAIN = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-train.conllu
+  CORPUS_DEV = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-dev.conllu
+  BLIND_TEST = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-test.conllu
   MODEL = -m=google/electra-base-discriminator
 else ifeq ($(LANG), et) #dev EDT
   CORPUS=et
@@ -54,7 +66,7 @@ else ifeq ($(LANG), fi)
   RES2=Finnish-TDT
   MODEL = -m=TurkuNLP/bert-base-finnish-cased-v1
   #MODEL = -m=TurkuNLP/wikibert-base-fi-cased
-  ATTN=--attention-layer=8
+  #ATTN=--attention-layer=8
 else ifeq ($(LANG), fr)
   CORPUS=fr_sequoia
   RES2=French-Sequoia
@@ -63,6 +75,7 @@ else ifeq ($(LANG), it)
   CORPUS=it_isdt
   RES2=Italian-ISDT
   MODEL = -m=dbmdz/bert-base-italian-xxl-cased
+  CONFIG=config-nu.ini
 else ifeq ($(LANG), lt)
   CORPUS=lt_alksnis
   RES2=Lithuanian-ALKSNIS
@@ -80,7 +93,7 @@ else ifeq ($(LANG), nl) #dev Alpino
 else ifeq ($(LANG), pl) #dev LFG
   CORPUS=pl
   RES2=Polish
-  MODEL = -m=dkleczek/bert-base-polish-uncased-v1 #DeepPavlov/bert-base-bg-cs-pl-ru-cased
+  MODEL = -m=dkleczek/bert-base-polish-cased-v1 #DeepPavlov/bert-base-bg-cs-pl-ru-cased
 else ifeq ($(LANG), ru)
   CORPUS=ru_syntagrus
   RES2=Russian-SynTagRus
@@ -102,6 +115,7 @@ else ifeq ($(LANG), uk)
   CORPUS=uk_iu
   RES2=Ukrainian-IU
   MODEL = -m=TurkuNLP/wikibert-base-uk-cased
+  # nu=0.9
 else
   CORPUS_TRAIN= data/CoNLL2009-ST-English-train.conll
   CORPUS_DEV  = data/CoNLL2009-ST-English-development.conll
@@ -119,7 +133,7 @@ $(EXP)/$(LANG)-$(FEAT)$(VER)/model:
 	python -u run.py train -p -d=$(GPU) -f=$(dir $@) \
 	   --conf=$(CONFIG) $(MODEL) $(ATTN) \
 	   --ftrain=$(CORPUS_TRAIN) $(MAX_SENT_LENGTH) $(BATCH_SIZE) $(BUCKETS) \
-	   --fdev=$(CORPUS_DEV) #--unk='[UNK]' --ftest=$(CORPUS_TEST) --seed=1
+	   --fdev=$(CORPUS_DEV)
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)-test.conllu: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
@@ -137,13 +151,14 @@ $(EXP)/$(LANG)-$(FEAT)$(VER)-test.cpu-time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	   $(BLIND_TEST)  \
 	   --fpred=/dev/null; ) &> $@
 
-LANGS=ar bg cs en et fi fr it lv lt nl pl ru sk sv ta uk 
-LANGS1=ar bg en et fi fr it ru ta uk
-LANGS2=lv lt nl pl ru sk sv cs
+LANGS=ar bg cs en et fi fr it lt lv nl pl ru sk sv ta uk 
+LANGS1=ar bg en et fi sk
+LANGS2=fr it ru ta uk sv
+LANGS3=lv lt nl pl cs
 
 all:
 	for l in $(LANGS); do \
-	    $(MAKE) -s GPU=$(GPU) LANG=$$l FEAT=$(FEAT) EXP=$(EXP) VER=$(VER) $(EXP)/$${l}-$(FEAT)$(VER)-test.conllu &> $(EXP)/$${l}-$(FEAT)$(VER)-test.make; \
+	    $(MAKE) -s GPU=$(GPU) LANG=$$l FEAT=$(FEAT) EXP=$(EXP) VER=$(VER) $(EXP)/$${l}-$(FEAT)$(VER)-test.conllu &>> $(EXP)/$${l}-$(FEAT)$(VER)-test.make; \
 	done
 
 train:
@@ -160,10 +175,16 @@ train:
 %-test.eval: %-test.nen.conllu
 	python $(UD_TOOLS)/iwpt20_xud_eval.py -v $(UD_TOOLS)/../test-gold/$(LANG).nen.conllu $< > $@
 
+%-test.evalb: %-test.eval
+	python $(UD_TOOLS)/eval.py -g $(UD_TOOLS)/../test-gold/$(LANG).conllu -s $@ --evalb
+
 evaluate:
 	for l in $(LANGS); do \
-	   $(MAKE) -s GPU=$(GPU) LANG=$$l $(EXP)/$$l-$(FEAT)-test.eval; \
+	   $(MAKE) -s GPU=$(GPU) LANG=$$l $(EXP)/$$l-$(FEAT)-test.evalb &>> $(EXP)/$$l-$(FEAT)-test.make; \
 	done
+
+$(EXP)/test.eval: evaluate
+	( cd $(EXP); python ../eval-summary.py > $(notdir $@) )
 
 baltic:
 	for l in et lt lv; do \

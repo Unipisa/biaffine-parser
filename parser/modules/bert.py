@@ -19,7 +19,8 @@ class BertEmbedding(nn.Module):
 
     def __init__(self, model, n_layers, n_out, requires_grad=False,
                  mask_token_id=0, token_dropout=0.0, mix_dropout=0.0,
-                 use_hidden_states=True, use_attentions=False, attention_layer=8):
+                 use_hidden_states=True, use_attentions=False,
+                 attention_head=4, attention_layer=8):
         """
         A module that directly utilizes the pretrained models in `transformers`_ to produce BERT representations.
 
@@ -40,6 +41,7 @@ class BertEmbedding(nn.Module):
         :param use_hidden_states: use the output hidden states from bert if True, or else
             the outputs.
         :param use_attentions: extract attention weights.
+        :param attention_head: which attention head to use.
         :param attention_layer: which attention layer weights to return.
 
     .. _transformers:
@@ -61,7 +63,7 @@ class BertEmbedding(nn.Module):
         self.mask_token_id = mask_token_id
         self.use_attentions = use_attentions
         self.attention_layer = attention_layer
-        self.head = 0
+        self.head = attention_head
 
         self.token_dropout = TokenDropout(token_dropout, mask_token_id) if token_dropout else None
         self.scalar_mix = ScalarMix(self.n_layers, mix_dropout)
