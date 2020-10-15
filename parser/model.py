@@ -1,18 +1,94 @@
 # -*- coding: utf-8 -*-
 
-from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM # , DeepBiaffine
+import torch
+import torch.nn as nn
+from parser.modules import MLP, BertEmbedding, Biaffine, BiLSTM, CharLSTM
 from parser.modules.dropout import IndependentDropout, SharedDropout
 from parser.utils.alg import eisner
 from parser.utils.fn import istree
 
-import torch
-import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from typing import Dict, Optional, Tuple, Any, List
 import torch.nn.functional as F
 
-from typing import Dict, Optional, Tuple, Any, List
-
 class Model(nn.Module):
+    r"""
+    The implementation of Biaffine Dependency Parser.
+
+    References:
+        - Timothy Dozat and Christopher D. Manning. 2017.
+          `Deep Biaffine Attention for Neural Dependency Parsing`_.
+
+    Args:
+        n_words (int):
+            The size of the word vocabulary.
+        n_feats (int):
+            The size of the feat vocabulary.
+        n_rels (int):
+            The number of labels in the treebank.
+        feat (str):
+            Specifies which type of additional feature to use: ``'char'`` | ``'bert'`` | ``'tag'``.
+            ``'char'``: Character-level representations extracted by CharLSTM.
+            ``'bert'``: BERT representations, other pretrained langugae models like XLNet are also feasible.
+            ``'tag'``: POS tag embeddings.
+            Default: ``'char'``.
+        n_word_embed (int):
+            The size of word embeddings. Default: 100.
+        n_feat_embed (int):
+            The size of feature representations. Default: 100.
+        n_char_embed (int):
+            The size of character embeddings serving as inputs of CharLSTM, required if ``feat='char'``. Default: 50.
+        bert (str):
+            Specifies which kind of language model to use, e.g., ``'bert-base-cased'`` and ``'xlnet-base-cased'``.
+            This is required if ``feat='bert'``. The full list can be found in `transformers`_.
+            Default: ``None``.
+        n_bert_layers (int):
+            Specifies how many last layers to use. Required if ``feat='bert'``.
+            The final outputs would be the weight sum of the hidden states of these layers.
+            Default: 4.
+        bert_fine_tune (bool):
+            Weather to fine tune the BERT model.
+            Deafult: False.
+        mix_dropout (float):
+            The dropout ratio of BERT layers. Required if ``feat='bert'``. Default: .0.
+        token_dropout (float):
+            The dropout ratio of tokens. Default: .0.
+        embed_dropout (float):
+            The dropout ratio of input embeddings. Default: .33.
+        n_lstm_hidden (int):
+            The size of LSTM hidden states. Default: 400.
+        n_lstm_layers (int):
+            The number of LSTM layers. Default: 3.
+        lstm_dropout (float):
+            The dropout ratio of LSTM. Default: .33.
+        n_mlp_arc (int):
+            Arc MLP size. Default: 500.
+        n_mlp_rel  (int):
+            Label MLP size. Default: 100.
+        mlp_dropout (float):
+            The dropout ratio of MLP layers. Default: .33.
+        use_hidden_states (bool):
+            Wethre to use hidden states rather than outputs from BERT.
+            Default: True.
+        use_attentions (bool):
+            Wethre to use attention heads from BERT.
+            Default: False.
+        attention_head (int):
+            Which attention head from BERT to use. Default: 0.
+        attention_layer (int):
+            Which attention layer from BERT to use; use all if 0. Default: 6.
+        feat_pad_index (int):
+            The index of the padding token in the feat vocabulary. Default: 0.
+        pad_index (int):
+            The index of the padding token in the word vocabulary. Default: 0.
+        unk_index (int):
+            The index of the unknown token in the word vocabulary. Default: 1.
+
+    .. _Deep Biaffine Attention for Neural Dependency Parsing:
+        https://openreview.net/forum?id=Hk95PK9le
+    .. _transformers:
+        https://github.com/huggingface/transformers
+    """
 
     def __init__(self, args, mask_token_id=0):
         super().__init__()
@@ -32,8 +108,6 @@ class Model(nn.Module):
                                        pad_index=args.feat_pad_index)
             self.pad_index = args.pad_index
         elif args.feat == 'bert':
-            if not hasattr(args, 'token_dropout'):
-                args.token_dropout = 0.0 # temporary PATCH
             self.feat_embed = BertEmbedding(model=args.bert_model,
                                             n_layers=args.n_bert_layers,
                                             n_out=args.n_feat_embed,
@@ -108,21 +182,38 @@ class Model(nn.Module):
         return f"Total parameters: {total_params}\n" \
             f"Trainable parameters: {trainable_params}"
 
+
     def load_pretrained(self, embed=None):
         if embed is not None:
             self.pretrained = nn.Embedding.from_pretrained(embed)
             nn.init.zeros_(self.word_embed.weight)
-
         return self
+
 
     def forward(self, words: torch.Tensor,
                 feats: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""
+        Args:
+            words (~torch.LongTensor): ``[batch_size, seq_len]``.
+                Word indices.
+            feats (~torch.LongTensor):
+                Feat indices.
+                If feat is ``'char'`` or ``'bert'``, the size of feats should be ``[batch_size, seq_len, fix_len]``.
+                if ``'tag'``, the size is ``[batch_size, seq_len]``.
+
+        Returns:
+            ~torch.Tensor, ~torch.Tensor:
+                The first tensor of shape ``[batch_size, seq_len, seq_len]`` holds scores of all possible arcs.
+                The second of shape ``[batch_size, seq_len, seq_len, n_labels]`` holds
+                scores of all possible labels on each arc.
+        """
+
         # words, feats are the first two items in the batch from TextDataLoader.__iter__()
         if words is None:
             words = feats[:,:,0] # drop subpiece dimension
         batch_size, seq_len = words.shape
-        mask = words.ne(self.pad_index)
         # get the mask and lengths of given batch
+        mask = words.ne(self.pad_index)
         lens = mask.sum(dim=1)
         # feat_embed: [batch_size, seq_len, n_feat_embed]
         # attn: [batch_size, seq_len, seq_len]
@@ -145,6 +236,7 @@ class Model(nn.Module):
             embed = self.embed_dropout(feat_embed)[0]
 
         if self.lstm:
+            # print('PAD:', self.pad_index, words, feats, embed, lens) # DEBUG
             x = pack_padded_sequence(embed, lens, True, False)
             x, _ = self.lstm(x)
             x, _ = pad_packed_sequence(x, True, total_length=seq_len)
@@ -165,7 +257,7 @@ class Model(nn.Module):
 
         # mix bert attentions
         if attn is not None:
-            s_arc += self.attn_mix[0] * attn
+            s_arc += self.attn_mix * attn
             # s_rel += self.attn_mix[1] * attn.unsqueeze(-1)
 
         # # head-dependent distance
@@ -194,10 +286,9 @@ class Model(nn.Module):
              arcs: torch.Tensor, rels: torch.Tensor,
              mask: torch.Tensor) -> torch.Tensor:
              # dist_cauchy: torch.Tensor = None
-        """
+        r"""
         Computes the arc and tag loss for a sequence given gold heads and tags.
-        Parameters
-        ----------
+        Args:
         s_arc : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, tags_count),
             which will be used to generate predictions for the dependency tags
@@ -222,7 +313,8 @@ class Model(nn.Module):
         loss : ``torch.Tensor``.
             The sum of the cross-entropy losses from the arcs and rels predictions.
         """
-        heads = arcs
+
+        # heads = arcs
         s_arc, arcs = s_arc[mask], arcs[mask]
         s_rel, rels = s_rel[mask], rels[mask]
         # select the predicted relations towards the correct heads
@@ -242,6 +334,26 @@ class Model(nn.Module):
 
     def decode(self, s_arc: torch.Tensor, s_rel: torch.Tensor,
                mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""
+        Args:
+            s_arc (~torch.Tensor): ``[batch_size, seq_len, seq_len]``.
+                Scores of all possible arcs.
+            s_rel (~torch.Tensor): ``[batch_size, seq_len, seq_len, n_labels]``.
+                Scores of all possible labels on each arc.
+            mask (~torch.BoolTensor): ``[batch_size, seq_len]``.
+                The mask for covering the unpadded tokens.
+            tree (bool):
+                If ``True``, ensures to output well-formed trees. Default: ``False``.
+            mbr (bool):
+                If ``True``, performs MBR decoding. Default: ``True``.
+            proj (bool):
+                If ``True``, ensures to output projective trees. Default: ``False``.
+
+        Returns:
+            ~torch.Tensor, ~torch.Tensor:
+                Predicted arcs and labels of shape ``[batch_size, seq_len]``.
+        """
+
         lens = mask.sum(1)
         # prevent self-loops
         s_arc.diagonal(0, 1, 2).fill_(float('-inf'))

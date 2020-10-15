@@ -20,8 +20,10 @@ CORPUS_DEV = $(CORPUS_DIR)/train-dev/UD_$(RES2)/$(CORPUS)-ud-dev.conllu
 
 #BLIND_TEST=$(CORPUS_DIR)/test-udpipe/$(LANG).conllu
 #BLIND_TEST=$(CORPUS_DIR)/test-stanza-sent/$(LANG).conllu
-#BLIND_TEST=../EDparser/data/iwpt2020/test-udpipe/$(LANG).conllu
-BLIND_TEST=../iwpt2020stdata/sysoutputs/turkunlp/primary/$(LANG).conllu
+#BLIND_TEST=$(CORPUS_DIR)/EDparser/data/iwpt2020/test-udpipe/$(LANG).conllu
+BLIND_TEST=$(CORPUS_DIR)/iwpt2020stdata/sysoutputs/turkunlp/primary/$(LANG).conllu
+
+GOLD_TEST= $(CORPUS_DIR)/iwpt2020stdata/$(UD_TOOLS)/../test-gold/$(LANG).conllu
 
 UD_TOOLS = $(CORPUS_DIR)/iwpt2020stdata/tools
 
@@ -41,12 +43,6 @@ else ifeq ($(LANG), cs) #dev PDT
   CORPUS=cs_pdt
   RES2=Czech-PDT
   MODEL = -m=DeepPavlov/bert-base-bg-cs-pl-ru-cased
-else ifeq ($(LANG), zh)
-  CORPUS=zh
-  CORPUS_TRAIN = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-train.conllu
-  CORPUS_DEV = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-dev.conllu
-  BLIND_TEST = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-test.conllu
-  MODEL = -m=hfl/chinese-electra-base-discriminator # bert-base-chinese # hfl/chinese-electra-large-discriminator
 else ifeq ($(LANG), en)
   CORPUS=en_ewt
   RES2=English-EWT
@@ -56,6 +52,7 @@ else ifeq ($(LANG), ptb)
   CORPUS_TRAIN = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-train.conllu
   CORPUS_DEV = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-dev.conllu
   BLIND_TEST = $(CORPUS_DIR)/SD_English_PTB/$(CORPUS)-sd-test.conllu
+  GOLD_TEST = $(CORPUS_DIR)/SD_English_PTB/en_ptb-sd-test.conllu
   MODEL = -m=google/electra-base-discriminator
 else ifeq ($(LANG), et) #dev EDT
   CORPUS=et
@@ -116,6 +113,12 @@ else ifeq ($(LANG), uk)
   RES2=Ukrainian-IU
   MODEL = -m=TurkuNLP/wikibert-base-uk-cased
   # nu=0.9
+else ifeq ($(LANG), zh)
+  CORPUS=zh
+  CORPUS_TRAIN = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-train.conllu
+  CORPUS_DEV = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-dev.conllu
+  BLIND_TEST = $(CORPUS_DIR)/CoNLL09/$(CORPUS)-test.conllu
+  MODEL = -m=hfl/chinese-electra-base-discriminator # bert-base-chinese # hfl/chinese-electra-large-discriminator
 else
   CORPUS_TRAIN= data/CoNLL2009-ST-English-train.conll
   CORPUS_DEV  = data/CoNLL2009-ST-English-development.conll
@@ -139,7 +142,7 @@ $(EXP)/$(LANG)-$(FEAT)$(VER)-test.conllu: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	python run.py predict -d=$(GPU) -f=$(dir $<) --tree \
 	   $(BLIND_TEST) \
 	   --fpred=$@
-	python ./fix-root.py $@
+	python $(CORPUS_DIR)/fix-root.py $@
 
 $(EXP)/$(LANG)-$(FEAT)$(VER)-test.time: $(EXP)/$(LANG)-$(FEAT)$(VER)/model
 	( time python run.py predict -d=$(GPU) -f=$(dir $<) --feat=$(FEAT) --tree  \
@@ -176,7 +179,10 @@ train:
 	python $(UD_TOOLS)/iwpt20_xud_eval.py -v $(UD_TOOLS)/../test-gold/$(LANG).nen.conllu $< > $@
 
 %-test.evalb: %-test.eval
-	python $(UD_TOOLS)/eval.py -g $(UD_TOOLS)/../test-gold/$(LANG).conllu -s $@ --evalb
+	python $(CORPUS_DIR)/eval.py -g $(GOLD_TEST) -s $@ --evalb
+
+%-test.eval07: %-test.conllu
+	perl $(CORPUS_DIR)/eval07.pl -p -q -g $(GOLD_TEST) -s $< > $@
 
 evaluate:
 	for l in $(LANGS); do \
