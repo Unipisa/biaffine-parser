@@ -209,11 +209,10 @@ class Model(nn.Module):
         """
 
         # words, feats are the first two items in the batch from TextDataLoader.__iter__()
-        if words is None:
-            words = feats[:,:,0] # drop subpiece dimension
-        batch_size, seq_len = words.shape
+        word_feats = feats[:,:,0] # drop subpiece dimension
+        batch_size, seq_len = word_feats.shape
         # get the mask and lengths of given batch
-        mask = words.ne(self.pad_index)
+        mask = word_feats.ne(self.pad_index)
         lens = mask.sum(dim=1)
         # feat_embed: [batch_size, seq_len, n_feat_embed]
         # attn: [batch_size, seq_len, seq_len]

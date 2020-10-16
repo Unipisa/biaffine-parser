@@ -20,7 +20,7 @@ class BertEmbedding(nn.Module):
     def __init__(self, model, n_layers, n_out, requires_grad=False,
                  mask_token_id=0, token_dropout=0.0, mix_dropout=0.0,
                  use_hidden_states=True, use_attentions=False,
-                 attention_head=4, attention_layer=8):
+                 attention_head=0, attention_layer=8):
         """
         A module that directly utilizes the pretrained models in `transformers`_ to produce BERT representations.
 
@@ -141,6 +141,7 @@ class BertEmbedding(nn.Module):
             for i, attn_i in enumerate(sub_attn):
                 size = sub_masks[i].sum(0)
                 attn_i = attn_i.view(size, size)
+                # size = min(size, self.n_attentions) # FIXME: n_attentions=1
                 seq_attn[i,:size,:size] = attn_i
         if hasattr(self, 'projection'):
             embed = self.projection(embed)
